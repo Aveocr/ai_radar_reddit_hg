@@ -1,0 +1,316 @@
+"""
+AI Radar — Vector & Chat Router
+Endpoints for semantic search, similar items, LLM chat, and index management.
+"""
+
+import os
+from typing import Optional
+
+import numpy as np
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config import get_settings
+from database.models import EnrichedItem, RawItem
+from database.session import get_db
+from llm.client import LLMClient
+from vector.embeddings import get_embedding_provider
+from vector.faiss_index import FaissIndexManager
+from vector.index_builder import rebuild_index
+from vector.schemas import (
+    ChatRequest,
+    ChatResponse,
+    IndexInfo,
+    RebuildResponse,
+    SimilarRequest,
+    VectorConfigInfo,
+    VectorConfigUpdate,
+    VectorSearchRequest,
+    VectorSearchResponse,
+    VectorSearchResult,
+)
+
+router = APIRouter(prefix="/api/v1/vector", tags=["vector"])
+
+# Singleton index manager — lazy loaded
+_index_manager: Optional[FaissIndexManager] = None
+
+
+def get_index_manager() -> FaissIndexManager:
+    global _index_manager
+    if _index_manager is None:
+        settings = get_settings()
+        _index_manager = FaissIndexManager(dim=settings.embedding_dim)
+        _index_manager.load()
+    return _index_manager
+
+
+@router.on_event("shutdown")
+async def shutdown():
+    global _index_manager
+    if _index_manager is not None:
+        try:
+            _index_manager.save()
+        except Exception:
+            pass
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Chat with LLM, optionally using FAISS context."""
+    settings = get_settings()
+    llm = LLMClient(
+        api_key=settings.llm_api_key or None,
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
+    )
+
+    # Build system prompt with optional FAISS context
+    system_prompt = (
+        "Ты — AI-ассистент системы мониторинга AI-инноваций AI Radar. "
+        "Отвечай на русском языке. Используй информацию из контекста, если она предоставлена. "
+        "Если контекст пуст, отвечай на основе своих знаний."
+    )
+
+    # Search FAISS for relevant context
+    manager = get_index_manager()
+    if not manager.is_empty:
+        try:
+            provider = get_embedding_provider()
+            query_vector = await provider.embed(request.message)
+            results = manager.search(np.array(query_vector), k=5)
+
+            if results:
+                context_parts = []
+                for r in results:
+                    md = r.metadata
+                    title = md.get("title", "")
+                    category = md.get("category", "")
+                    summary = md.get("summary_ru", "")
+                    tech = ", ".join(md.get("tech_stack", []))
+                    if title or summary:
+                        context_parts.append(
+                            f"- {title} | Категория: {category} | Описание: {summary} | Технологии: {tech}"
+                        )
+
+                if context_parts:
+                    system_prompt += (
+                        "\n\nКонтекст из базы знаний AI Radar:\n"
+                        + "\n".join(context_parts)
+                    )
+        except Exception as exc:
+            print(f"[Chat] FAISS search error: {exc}")
+
+    # Build message list
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in request.history:
+        messages.append({"role": msg.role, "content": msg.content})
+    messages.append({"role": "user", "content": request.message})
+
+    try:
+        reply = await llm.chat(messages, temperature=0.7, max_tokens=4000)
+        return ChatResponse(reply=reply)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM API error: {str(exc)}")
+
+
+@router.post("/search", response_model=VectorSearchResponse)
+async def search(
+    request: VectorSearchRequest,
+):
+    """Semantic search by query text."""
+    manager = get_index_manager()
+    if manager.is_empty:
+        return VectorSearchResponse(results=[])
+
+    try:
+        provider = get_embedding_provider()
+        query_vector = await provider.embed(request.query)
+        results = manager.search(np.array(query_vector), k=request.k)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Search error: {str(exc)}")
+
+    items = []
+    for r in results:
+        md = r.metadata
+        items.append(VectorSearchResult(
+            id=md.get("item_id", ""),
+            title=md.get("title", ""),
+            category=md.get("category", ""),
+            summary_ru=md.get("summary_ru", ""),
+            tech_stack=md.get("tech_stack", []),
+            use_cases=md.get("use_cases", []),
+            source_name=md.get("source_name", ""),
+            score=r.score,
+        ))
+
+    return VectorSearchResponse(results=items)
+
+
+@router.post("/similar", response_model=VectorSearchResponse)
+async def similar(
+    request: SimilarRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Find similar items by model ID."""
+    manager = get_index_manager()
+    if manager.is_empty:
+        return VectorSearchResponse(results=[])
+
+    # First, try to find by enriched_item_id
+    md = manager.get_metadata_by_enriched_id(request.model_id)
+
+    # If not found, try to find by raw item ID — lookup enriched ID from DB
+    if md is None:
+        result = await db.execute(
+            select(EnrichedItem).where(EnrichedItem.raw_item_id == request.model_id)
+        )
+        enriched = result.scalar_one_or_none()
+        if enriched:
+            md = manager.get_metadata_by_enriched_id(str(enriched.id))
+
+    if md is None:
+        raise HTTPException(status_code=404, detail="Item not found in index")
+
+    # Get the vector from the index
+    all_vectors = []
+    all_ids = []
+    if manager.index and manager.index.ntotal > 0:
+        import faiss
+        ids = np.arange(manager.index.ntotal, dtype=np.int64)
+        vectors = np.zeros((manager.index.ntotal, manager.dim), dtype=np.float32)
+        for i in range(manager.index.ntotal):
+            vectors[i] = manager.index.reconstruct(i)
+
+        if md.faiss_id < len(vectors):
+            query_vector = vectors[md.faiss_id].reshape(1, -1).copy()
+        else:
+            raise HTTPException(status_code=404, detail="Item vector not found in index")
+    else:
+        raise HTTPException(status_code=404, detail="Index is empty")
+
+    # Search
+    results = manager.search(query_vector, k=request.k + 1)
+
+    # Filter out the query item itself
+    items = []
+    for r in results:
+        if r.id == request.model_id or r.id == str(md.enriched_item_id):
+            continue
+        md_data = r.metadata
+        items.append(VectorSearchResult(
+            id=md_data.get("item_id", ""),
+            title=md_data.get("title", ""),
+            category=md_data.get("category", ""),
+            summary_ru=md_data.get("summary_ru", ""),
+            tech_stack=md_data.get("tech_stack", []),
+            use_cases=md_data.get("use_cases", []),
+            source_name=md_data.get("source_name", ""),
+            score=r.score,
+        ))
+        if len(items) >= request.k:
+            break
+
+    return VectorSearchResponse(results=items)
+
+
+@router.post("/rebuild", response_model=RebuildResponse)
+async def rebuild(
+    db: AsyncSession = Depends(get_db),
+):
+    """Rebuild the FAISS index from database. Requires admin."""
+    try:
+        count = await rebuild_index(db)
+        global _index_manager
+        settings = get_settings()
+        _index_manager = FaissIndexManager(dim=settings.embedding_dim)
+        _index_manager.load()
+        return RebuildResponse(indexed_count=count)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Rebuild failed: {str(exc)}")
+
+
+@router.get("/index-info", response_model=IndexInfo)
+async def index_info():
+    """Get FAISS index status."""
+    manager = get_index_manager()
+    return IndexInfo(
+        size=manager.size,
+        dim=manager.dim,
+        loaded=not manager.is_empty,
+    )
+
+
+@router.get("/config", response_model=VectorConfigInfo)
+async def get_config():
+    """Get current vector/LLM configuration."""
+    settings = get_settings()
+    manager = get_index_manager()
+    return VectorConfigInfo(
+        embedding_provider=settings.embedding_provider,
+        embedding_model=settings.embedding_model,
+        embedding_dim=settings.embedding_dim,
+        gigachat_configured=bool(settings.gigachat_client_id and settings.gigachat_client_secret),
+        llm_configured=bool(settings.llm_api_key),
+        llm_model=settings.llm_model,
+        faiss_index_size=manager.size,
+    )
+
+
+@router.post("/config", response_model=VectorConfigInfo)
+async def update_config(config: VectorConfigUpdate):
+    """Update vector/LLM configuration in .env file."""
+    settings = get_settings()
+    env_path = ".env"
+
+    updates = {
+        "EMBEDDING_PROVIDER": config.embedding_provider,
+        "EMBEDDING_MODEL": config.embedding_model,
+        "LLM_API_KEY": config.llm_api_key or settings.llm_api_key,
+        "LLM_MODEL": config.llm_model,
+        "LLM_BASE_URL": config.llm_base_url,
+    }
+    if config.gigachat_client_id is not None:
+        updates["GIGACHAT_CLIENT_ID"] = config.gigachat_client_id
+    if config.gigachat_client_secret is not None:
+        updates["GIGACHAT_CLIENT_SECRET"] = config.gigachat_client_secret
+
+    try:
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        else:
+            lines = []
+
+        existing_keys = set()
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("#") or "=" not in stripped:
+                continue
+            key = stripped.split("=", 1)[0].strip()
+            existing_keys.add(key)
+            if key in updates:
+                lines[i] = f"{key}={updates[key]}\n"
+
+        for key, value in updates.items():
+            if key not in existing_keys:
+                lines.append(f"{key}={value}\n")
+
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
+        # Reload settings
+        get_settings.cache_clear()
+
+        # Recreate index manager with new dim if needed
+        global _index_manager
+        _index_manager = None
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Config update failed: {str(exc)}")
+
+    return await get_config()

@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from admin.router import router as admin_router
 from middleware import AdminAuthMiddleware, ProtectedStaticFiles
 from routes import register_routes
+from vector.router import router as vector_router
 
 app = FastAPI(
     title="AI Radar",
@@ -30,4 +31,5 @@ app.mount(
 )
 
 app.include_router(admin_router)
+app.include_router(vector_router)
 register_routes(app)

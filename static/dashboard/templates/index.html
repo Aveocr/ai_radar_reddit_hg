@@ -118,8 +118,18 @@
                 document.body.removeChild(link);
             };
             
-            const handleSimilar = () => {
-                alert("Похожие модели (заглушка)");
+            const handleSimilar = async () => {
+                try {
+                    const res = await axios.post('api/vector-search', { model_id: modelId });
+                    if (res.data.similar_ids && res.data.similar_ids.length > 0) {
+                        alert(`Найдено похожих: ${res.data.similar_ids.length}\nID: ${res.data.similar_ids.join(', ')}`);
+                    } else {
+                        alert(res.data.message || 'Похожие модели не найдены');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Ошибка поиска похожих');
+                }
             };
             
             if (loading) return <div className="p-8">Загрузка...</div>;
@@ -217,8 +227,17 @@
             };
             
             const handleVectorSearch = async (modelId) => {
-                await axios.post('api/vector-search', { model_id: modelId });
-                alert(`Векторный поиск заглушка для модели ${modelId}`);
+                try {
+                    const res = await axios.post('api/vector-search', { model_id: modelId });
+                    if (res.data.similar_ids && res.data.similar_ids.length > 0) {
+                        alert(`Найдено похожих: ${res.data.similar_ids.length}\nID: ${res.data.similar_ids.join(', ')}`);
+                    } else {
+                        alert(res.data.message || 'Похожие модели не найдены');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Ошибка поиска похожих');
+                }
             };
             
             const exportCSV = () => {
