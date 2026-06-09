@@ -65,7 +65,7 @@ class LocalEmbeddings(EmbeddingProvider):
         self._load_model()
         loop = asyncio.get_event_loop()
         embeddings = await loop.run_in_executor(
-            None, lambda: self._model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
+            None, lambda: self._model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
         )
         return embeddings
 
@@ -161,7 +161,8 @@ class GigaChatEmbeddings(EmbeddingProvider):
             return np.empty((0, self._dim), dtype=np.float32)
 
         connector = aiohttp.TCPConnector(limit=10)
-        async with aiohttp.ClientSession(connector=connector) as session:
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             embeddings = await self._embed_request(session, texts)
 
         return np.array(embeddings, dtype=np.float32)

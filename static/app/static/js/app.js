@@ -233,6 +233,7 @@ const CHAT_API = {
 let chatAbortController = null;
 let chatHistory = [];
 let isChatSending = false;
+let isChatInitialized = false;
 const CHAT_STORAGE_KEY = "ai_radar_chat_history";
 
 function loadChatHistory() {
@@ -409,6 +410,9 @@ function stopChatMessage() {
 }
 
 function initChat() {
+    if (isChatInitialized) return;
+    isChatInitialized = true;
+
     const input = document.getElementById("chat-input");
     const sendBtn = document.getElementById("chat-send");
     const stopBtn = document.getElementById("chat-stop");

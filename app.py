@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -5,12 +7,28 @@ from fastapi.staticfiles import StaticFiles
 from admin.router import router as admin_router
 from middleware import AdminAuthMiddleware, ProtectedStaticFiles
 from routes import register_routes
-from vector.router import router as vector_router
+from vector.router import router as vector_router, get_index_manager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: pre-load index manager
+    get_index_manager()
+    yield
+    # Shutdown: save index
+    from vector.router import _index_manager
+    if _index_manager is not None:
+        try:
+            _index_manager.save()
+        except Exception:
+            pass
+
 
 app = FastAPI(
     title="AI Radar",
     description="Automated AI innovation monitoring system",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

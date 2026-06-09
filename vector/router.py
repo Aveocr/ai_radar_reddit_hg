@@ -3,14 +3,17 @@ AI Radar — Vector & Chat Router
 Endpoints for semantic search, similar items, LLM chat, and index management.
 """
 
+import asyncio
 import os
 from typing import Optional
 
+import faiss
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from admin.auth import get_current_admin
 from config import get_settings
 from database.models import EnrichedItem, RawItem
 from database.session import get_db
@@ -33,6 +36,9 @@ from vector.schemas import (
 
 router = APIRouter(prefix="/api/v1/vector", tags=["vector"])
 
+# Lock for rebuild to prevent concurrent execution
+_rebuild_lock = asyncio.Lock()
+
 # Singleton index manager — lazy loaded
 _index_manager: Optional[FaissIndexManager] = None
 
@@ -44,16 +50,6 @@ def get_index_manager() -> FaissIndexManager:
         _index_manager = FaissIndexManager(dim=settings.embedding_dim)
         _index_manager.load()
     return _index_manager
-
-
-@router.on_event("shutdown")
-async def shutdown():
-    global _index_manager
-    if _index_manager is not None:
-        try:
-            _index_manager.save()
-        except Exception:
-            pass
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -176,22 +172,11 @@ async def similar(
     if md is None:
         raise HTTPException(status_code=404, detail="Item not found in index")
 
-    # Get the vector from the index
-    all_vectors = []
-    all_ids = []
-    if manager.index and manager.index.ntotal > 0:
-        import faiss
-        ids = np.arange(manager.index.ntotal, dtype=np.int64)
-        vectors = np.zeros((manager.index.ntotal, manager.dim), dtype=np.float32)
-        for i in range(manager.index.ntotal):
-            vectors[i] = manager.index.reconstruct(i)
+    # Get the vector from the index using reconstruct for single vector (O(1) instead of O(n))
+    if not (manager.index and manager.index.ntotal > 0 and md.faiss_id < manager.index.ntotal):
+        raise HTTPException(status_code=404, detail="Item vector not found in index")
 
-        if md.faiss_id < len(vectors):
-            query_vector = vectors[md.faiss_id].reshape(1, -1).copy()
-        else:
-            raise HTTPException(status_code=404, detail="Item vector not found in index")
-    else:
-        raise HTTPException(status_code=404, detail="Index is empty")
+    query_vector = manager.index.reconstruct(md.faiss_id).reshape(1, -1).copy()
 
     # Search
     results = manager.search(query_vector, k=request.k + 1)
@@ -221,17 +206,19 @@ async def similar(
 @router.post("/rebuild", response_model=RebuildResponse)
 async def rebuild(
     db: AsyncSession = Depends(get_db),
+    admin: str = Depends(get_current_admin),
 ):
     """Rebuild the FAISS index from database. Requires admin."""
-    try:
-        count = await rebuild_index(db)
-        global _index_manager
-        settings = get_settings()
-        _index_manager = FaissIndexManager(dim=settings.embedding_dim)
-        _index_manager.load()
-        return RebuildResponse(indexed_count=count)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Rebuild failed: {str(exc)}")
+    async with _rebuild_lock:
+        try:
+            count = await rebuild_index(db)
+            global _index_manager
+            settings = get_settings()
+            _index_manager = FaissIndexManager(dim=settings.embedding_dim)
+            _index_manager.load()
+            return RebuildResponse(indexed_count=count)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Rebuild failed: {str(exc)}")
 
 
 @router.get("/index-info", response_model=IndexInfo)
