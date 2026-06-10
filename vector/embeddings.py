@@ -41,6 +41,8 @@ class LocalEmbeddings(EmbeddingProvider):
 
     MODEL_CACHE_DIR = "models/fastembed_cache"
 
+    MODEL_CACHE_DIR = "models/fastembed_cache"
+
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
         self._model_name = model_name
         self._cache_dir = self._resolve_cache_dir()
@@ -50,10 +52,11 @@ class LocalEmbeddings(EmbeddingProvider):
     @staticmethod
     def _resolve_cache_dir() -> str:
         import os
-        return os.path.join(
+        cache_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "models", "fastembed_cache",
         )
+        return cache_dir
 
     @property
     def dim(self) -> int:
