@@ -39,20 +39,19 @@ class EmbeddingProvider(ABC):
 class LocalEmbeddings(EmbeddingProvider):
     """Local embeddings using fastembed (ONNX runtime, no torch)."""
 
-    MODEL_CACHE_DIR = "models/fastembed_cache"
+    MODEL_DIR = "models/onnx/all-MiniLM-L6-v2"
 
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        self._model_name = model_name
-        self._cache_dir = self._resolve_cache_dir()
+    def __init__(self):
+        self._model_path = self._resolve_model_path()
         self._model = None
         self._dim = 384
 
     @staticmethod
-    def _resolve_cache_dir() -> str:
+    def _resolve_model_path() -> str:
         import os
         return os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "models", "fastembed_cache",
+            "models", "onnx", "all-MiniLM-L6-v2",
         )
 
     @property
@@ -62,7 +61,15 @@ class LocalEmbeddings(EmbeddingProvider):
     def _load_model(self):
         if self._model is None:
             from fastembed import TextEmbedding
-            self._model = TextEmbedding(self._model_name, cache_dir=self._cache_dir)
+            path = self._model_path
+            if not os.path.isdir(path):
+                raise RuntimeError(
+                    f"[LocalEmbeddings] Model directory not found: {path}\n"
+                    f"Place the ONNX model files in {path}:\n"
+                    f"  - model.onnx\n  - tokenizer.json\n  - config.json\n"
+                    f"  - tokenizer_config.json\n  - special_tokens_map.json"
+                )
+            self._model = TextEmbedding(model_name=path)
             try:
                 self._dim = self._model.model_dim
             except AttributeError:
@@ -205,4 +212,4 @@ def get_embedding_provider() -> EmbeddingProvider:
             verify_ssl=settings.gigachat_verify_ssl,
         )
 
-    return LocalEmbeddings(model_name=settings.embedding_model)
+    return LocalEmbeddings()

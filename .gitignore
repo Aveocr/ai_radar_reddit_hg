@@ -228,9 +228,6 @@ data/*.sqlite3
 *.log
 logs/
 
-# Pre-downloaded ONNX model files (run scripts/download_model.py)
-models/
-
 # Local secrets
 .env.*
 !.env.example
