@@ -1,6 +1,6 @@
 """
 AI Radar — Embedding Providers
-Supports local (sentence-transformers) and GigaChat API embeddings.
+Supports local (fastembed / ONNX) and GigaChat API embeddings.
 """
 
 import asyncio
@@ -37,9 +37,9 @@ class EmbeddingProvider(ABC):
 
 
 class LocalEmbeddings(EmbeddingProvider):
-    """Local embeddings using sentence-transformers."""
+    """Local embeddings using fastembed (ONNX runtime, no torch)."""
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
         self._model_name = model_name
         self._model = None
         self._dim = 384
@@ -49,23 +49,31 @@ class LocalEmbeddings(EmbeddingProvider):
         return self._dim
 
     def _load_model(self):
-        """Lazy load the sentence-transformers model."""
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self._model_name)
-            self._dim = self._model.get_sentence_embedding_dimension()
+            from fastembed import TextEmbedding
+            self._model = TextEmbedding(self._model_name)
+            try:
+                self._dim = self._model.model_dim
+            except AttributeError:
+                sample = list(self._model.embed(["test"]))
+                if sample:
+                    self._dim = len(sample[0])
 
     async def embed(self, text: str) -> List[float]:
         self._load_model()
         loop = asyncio.get_event_loop()
-        embedding = await loop.run_in_executor(None, self._model.encode, text, True)
-        return embedding.tolist()
+        embeddings = await loop.run_in_executor(
+            None, lambda: list(self._model.embed([text]))
+        )
+        return embeddings[0].tolist()
 
     async def embed_batch(self, texts: List[str]) -> np.ndarray:
         self._load_model()
+        if not texts:
+            return np.empty((0, self._dim), dtype=np.float32)
         loop = asyncio.get_event_loop()
         embeddings = await loop.run_in_executor(
-            None, lambda: self._model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
+            None, lambda: np.array(list(self._model.embed(texts)), dtype=np.float32)
         )
         return embeddings
 

@@ -1,6 +1,6 @@
 """
 Tests for the Vector / FAISS module.
-Uses mocks to avoid heavy dependency loading (sentence-transformers, FAISS).
+Uses mocks to avoid heavy dependency loading (fastembed, FAISS).
 """
 
 import asyncio
@@ -101,14 +101,14 @@ class TestFaissIndexManager(unittest.TestCase):
 
 
 class TestLocalEmbeddings(unittest.TestCase):
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_embed(self, mock_st):
+    @patch("fastembed.TextEmbedding")
+    def test_embed(self, mock_te):
         from vector.embeddings import LocalEmbeddings
 
         mock_model = MagicMock()
-        mock_model.get_sentence_embedding_dimension.return_value = 384
-        mock_model.encode.return_value = np.array([0.1] * 384)
-        mock_st.return_value = mock_model
+        mock_model.model_dim = 384
+        mock_model.embed.return_value = iter([np.array([0.1] * 384)])
+        mock_te.return_value = mock_model
 
         emb = LocalEmbeddings("test-model")
         result = asyncio.run(emb.embed("test text"))
@@ -116,14 +116,17 @@ class TestLocalEmbeddings(unittest.TestCase):
         self.assertEqual(len(result), 384)
         self.assertAlmostEqual(result[0], 0.1)
 
-    @patch("sentence_transformers.SentenceTransformer")
-    def test_embed_batch(self, mock_st):
+    @patch("fastembed.TextEmbedding")
+    def test_embed_batch(self, mock_te):
         from vector.embeddings import LocalEmbeddings
 
         mock_model = MagicMock()
-        mock_model.get_sentence_embedding_dimension.return_value = 384
-        mock_model.encode.return_value = np.array([[0.1] * 384, [0.2] * 384])
-        mock_st.return_value = mock_model
+        mock_model.model_dim = 384
+        mock_model.embed.return_value = iter([
+            np.array([0.1] * 384),
+            np.array([0.2] * 384),
+        ])
+        mock_te.return_value = mock_model
 
         emb = LocalEmbeddings("test-model")
         result = asyncio.run(emb.embed_batch(["text1", "text2"]))
