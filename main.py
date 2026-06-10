@@ -3,6 +3,7 @@
 AI Radar — Main Application Entry Point
 """
 
+import asyncio
 import uvicorn
 from contextlib import asynccontextmanager
 
@@ -23,6 +24,7 @@ from database.base import Base
 from database.session import init_engine_for_app, is_postgres
 from database.bootstrap import seed_default_sources
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from vector.router import router as vector_router, get_index_manager
 
 
 @asynccontextmanager
@@ -38,7 +40,28 @@ async def lifespan(app: FastAPI):
 
     app.state.http_client = httpx.AsyncClient(timeout=10.0)
 
+    # Load FAISS index
+    get_index_manager()
+
+    # Start background FAISS rebuild scheduler
+    from vector.scheduler import scheduler_loop
+    scheduler_task = asyncio.create_task(scheduler_loop(), name="faiss-scheduler")
+
     yield
+
+    # Shutdown: cancel scheduler, save index
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
+
+    from vector.router import _index_manager
+    if _index_manager is not None:
+        try:
+            _index_manager.save()
+        except Exception:
+            pass
 
     await app.state.http_client.aclose()
     await engine.dispose()
@@ -171,6 +194,7 @@ async def admin_spa(request: Request, path: str = ""):
 # ═══════════════════════════════════════════════════════
 app.include_router(admin_router)
 app.include_router(user_router)
+app.include_router(vector_router)
 
 
 @app.get("/")
