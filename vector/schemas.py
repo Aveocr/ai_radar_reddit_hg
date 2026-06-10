@@ -54,7 +54,7 @@ class RebuildResponse(BaseModel):
 
 class VectorConfigUpdate(BaseModel):
     embedding_provider: str = "local"
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     gigachat_client_id: Optional[str] = None
     gigachat_client_secret: Optional[str] = None
     llm_api_key: Optional[str] = None

@@ -39,10 +39,21 @@ class EmbeddingProvider(ABC):
 class LocalEmbeddings(EmbeddingProvider):
     """Local embeddings using fastembed (ONNX runtime, no torch)."""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
+    MODEL_CACHE_DIR = "models/fastembed_cache"
+
+    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
         self._model_name = model_name
+        self._cache_dir = self._resolve_cache_dir()
         self._model = None
         self._dim = 384
+
+    @staticmethod
+    def _resolve_cache_dir() -> str:
+        import os
+        return os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "models", "fastembed_cache",
+        )
 
     @property
     def dim(self) -> int:
@@ -51,7 +62,7 @@ class LocalEmbeddings(EmbeddingProvider):
     def _load_model(self):
         if self._model is None:
             from fastembed import TextEmbedding
-            self._model = TextEmbedding(self._model_name)
+            self._model = TextEmbedding(self._model_name, cache_dir=self._cache_dir)
             try:
                 self._dim = self._model.model_dim
             except AttributeError:

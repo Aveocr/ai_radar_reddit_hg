@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # ─── Embedding Settings ───
     embedding_provider: str = "local"
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
     gigachat_client_id: str = ""
     gigachat_client_secret: str = ""
