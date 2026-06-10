@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from fastapi import APIRouter, Query, Depends
 from static.dashboard.models.schemas import ModelCard, ModelDetail
@@ -13,6 +13,7 @@ async def list_models(
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     min_popularity: Optional[int] = Query(None),
+    ids: Optional[str] = Query(None, description="Comma-separated enriched_item_ids to filter by"),
     sort_by: str = Query("date", regex="^(date|popularity)$"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -25,6 +26,8 @@ async def list_models(
         "date_to": date_to,
         "min_popularity": min_popularity,
     }
+    if ids:
+        filters["ids"] = [x.strip() for x in ids.split(",") if x.strip()]
     models, total = await provider.get_models(filters, page, limit, sort_by)
     return {"items": models, "total": total, "page": page, "limit": limit}
 

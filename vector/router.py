@@ -52,12 +52,68 @@ def get_index_manager() -> FaissIndexManager:
     return _index_manager
 
 
+VECTOR_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "vector_search",
+        "description": "Поиск AI-моделей в базе знаний AI Radar по семантическому сходству. Возвращает описание, категорию, технологии и сценарии использования.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Поисковый запрос на естественном языке (например: 'модели для сегментации изображений на мобильных устройствах')",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Количество результатов (максимум 20, по умолчанию 5)",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+
+async def _execute_vector_search(query: str = "", top_k: int = 5):
+    manager = get_index_manager()
+    if manager.is_empty:
+        return {"results": [], "message": "FAISS index is empty"}
+    try:
+        provider = get_embedding_provider()
+        query_vector = await provider.embed(query)
+        results = manager.search(np.array(query_vector), k=min(top_k, 20))
+        items = []
+        for r in results:
+            md = r.metadata
+            items.append({
+                "id": md.get("enriched_item_id", ""),
+                "title": md.get("title", ""),
+                "category": md.get("category", ""),
+                "summary_ru": md.get("summary_ru", ""),
+                "tech_stack": md.get("tech_stack", []),
+                "use_cases": md.get("use_cases", []),
+                "source_name": md.get("source_name", ""),
+                "score": round(r.score, 4),
+            })
+        return {"results": items, "total": len(items)}
+    except Exception as exc:
+        return {"results": [], "error": str(exc)}
+
+
+def _tool_executor(name: str, args: dict):
+    if name == "vector_search":
+        return asyncio.run(_execute_vector_search(**args))
+    return {"error": f"Unknown tool: {name}"}
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Chat with LLM, optionally using FAISS context."""
+    """Chat with LLM, optionally using FAISS context via function calling."""
     settings = get_settings()
     llm = LLMClient(
         api_key=settings.llm_api_key or None,
@@ -65,50 +121,28 @@ async def chat(
         model=settings.llm_model,
     )
 
-    # Build system prompt with optional FAISS context
     system_prompt = (
         "Ты — AI-ассистент системы мониторинга AI-инноваций AI Radar. "
-        "Отвечай на русском языке. Используй информацию из контекста, если она предоставлена. "
-        "Если контекст пуст, отвечай на основе своих знаний."
+        "Отвечай на русском языке. "
+        "У тебя есть функция vector_search — используй её когда пользователь спрашивает про AI-модели, "
+        "просит найти что-то, сравнить, или получить информацию из базы знаний. "
+        "После получения результатов дай краткую сводку: что найдено, какие категории, "
+        "выдели топ-3 наиболее релевантные модели."
     )
 
-    # Search FAISS for relevant context
-    manager = get_index_manager()
-    if not manager.is_empty:
-        try:
-            provider = get_embedding_provider()
-            query_vector = await provider.embed(request.message)
-            results = manager.search(np.array(query_vector), k=5)
-
-            if results:
-                context_parts = []
-                for r in results:
-                    md = r.metadata
-                    title = md.get("title", "")
-                    category = md.get("category", "")
-                    summary = md.get("summary_ru", "")
-                    tech = ", ".join(md.get("tech_stack", []))
-                    if title or summary:
-                        context_parts.append(
-                            f"- {title} | Категория: {category} | Описание: {summary} | Технологии: {tech}"
-                        )
-
-                if context_parts:
-                    system_prompt += (
-                        "\n\nКонтекст из базы знаний AI Radar:\n"
-                        + "\n".join(context_parts)
-                    )
-        except Exception as exc:
-            print(f"[Chat] FAISS search error: {exc}")
-
-    # Build message list
     messages = [{"role": "system", "content": system_prompt}]
     for msg in request.history:
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": request.message})
 
     try:
-        reply = await llm.chat(messages, temperature=0.7, max_tokens=4000)
+        reply = await llm.chat_with_tools(
+            messages,
+            tools=[VECTOR_SEARCH_TOOL],
+            tool_executor=_tool_executor,
+            temperature=0.7,
+            max_tokens=4000,
+        )
         return ChatResponse(reply=reply)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"LLM API error: {str(exc)}")

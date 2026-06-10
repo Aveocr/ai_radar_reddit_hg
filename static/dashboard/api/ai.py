@@ -2,6 +2,7 @@ from typing import Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from config import get_settings
 from vector.embeddings import get_embedding_provider
@@ -21,9 +22,40 @@ def _get_index():
     return _index_manager
 
 
+class AIFilterRequest(BaseModel):
+    query: str
+    top_k: int = 20
+
+
 @router.post("/ai-filter")
-async def ai_filter(query: str):
-    return {"message": f"AI filter would process: {query}", "sql_condition": "1=1"}
+async def ai_filter(req: AIFilterRequest):
+    """Semantic search via FAISS. Returns matching model IDs for dashboard filtering."""
+    manager = _get_index()
+    if manager.is_empty:
+        return {"ids": [], "results": [], "message": "FAISS index is empty. Run rebuild first."}
+
+    try:
+        provider = get_embedding_provider()
+        query_vector = await provider.embed(req.query)
+        results = manager.search(np.array(query_vector), k=req.top_k)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Search error: {str(exc)}")
+
+    ids = []
+    items = []
+    for r in results:
+        md = r.metadata
+        eid = md.get("enriched_item_id", "")
+        ids.append(eid)
+        items.append({
+            "id": eid,
+            "title": md.get("title", ""),
+            "category": md.get("category", ""),
+            "summary_ru": md.get("summary_ru", ""),
+            "score": round(r.score, 4),
+        })
+
+    return {"ids": ids, "results": items, "total": len(items)}
 
 
 @router.post("/vector-search")
