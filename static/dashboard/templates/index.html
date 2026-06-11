@@ -4,37 +4,325 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Model Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <style>
-        .card-hover:hover { transform: translateY(-2px); transition: all 0.2s; }
-        .line-clamp-2 {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+        /* ========== ОСНОВНЫЕ СТИЛИ ИЗ ПРИМЕРА ========== */
+        :root {
+            --bg: #0f172a;
+            --bg-card: #1e293b;
+            --bg-hover: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --accent-green: #10b981;
+            --border: #334155;
+            --radius: 8px;
+            --radius-lg: 12px;
         }
-        /* Простые стили для статистики вместо Recharts */
-        .stat-bar {
-            height: 8px;
-            background-color: #3b82f6;
-            border-radius: 4px;
-            margin-top: 4px;
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            line-height: 1.5;
+        }
+
+        /* Основные компоненты UI */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        .tiles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .tile {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .tile:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            border-color: var(--accent);
+        }
+
+        .tile-icon { font-size: 36px; margin-bottom: 12px; }
+        .tile h3 { font-size: 20px; margin-bottom: 8px; font-weight: 600; }
+        .tile p { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+
+        .tile-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Панель фильтров */
+        .filter-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 32px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 140px;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+
+        .filter-group input, .filter-group select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        .filter-group input:focus, .filter-group select:focus {
+            border-color: var(--accent);
+        }
+
+        /* Кнопки */
+        .btn {
+            background: var(--bg-hover);
+            border: none;
+            padding: 8px 18px;
+            border-radius: var(--radius);
+            color: var(--text);
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 13px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+        }
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+        .btn-green {
+            background: var(--accent-green);
+        }
+        .btn-green:hover {
+            background: #0d9488;
+        }
+        .btn-large {
+            padding: 10px 24px;
+            font-size: 14px;
+        }
+
+        /* Статистика */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stats-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+        }
+
+        .stats-card h3 {
+            font-size: 16px;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
         .stat-item {
             margin-bottom: 12px;
         }
+        .stat-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .stat-bar-bg {
+            height: 6px;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 4px;
+            width: 0%;
+        }
+
+        .period-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .period-btn {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+        .period-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* Список источников */
+        .sources-cloud {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 32px;
+        }
+        .sources-cloud h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: var(--text-muted);
+        }
+        .source-chip {
+            display: inline-block;
+            background: var(--bg);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 12px;
+            margin: 0 8px 8px 0;
+            border: 1px solid var(--border);
+        }
+
+        /* Пагинация */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 40px;
+        }
+        .page-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text);
+        }
+        .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .page-info {
+            padding: 8px 0;
+            color: var(--text-muted);
+        }
+
+        /* Детальная страница */
+        .detail-container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 24px;
+        }
+        .detail-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .raw-data {
+            margin-top: 24px;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+        .raw-data p {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+
+        /* общие */
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-muted);
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
     </style>
 </head>
-<body class="bg-gray-100">
+<body>
     <div id="root"></div>
+
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Компонент для отображения статистики простыми полосками
+        // Компонент статистики
         const StatsPanel = ({ stats, period, setPeriod }) => {
             const categoryData = Object.entries(stats.by_category || {}).map(([name, value]) => ({ name, value }));
             const sourceData = Object.entries(stats.by_source || {}).map(([name, value]) => ({ name, value }));
@@ -42,37 +330,41 @@
             const maxSource = Math.max(...sourceData.map(d => d.value), 1);
             
             return (
-                <div className="bg-white p-4 rounded shadow col-span-2">
-                    <h2 className="text-xl font-semibold mb-2">Статистика</h2>
-                    <div className="flex gap-4 mb-4">
-                        <button onClick={() => setPeriod('week')} className={`px-3 py-1 rounded ${period === 'week' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>Неделя</button>
-                        <button onClick={() => setPeriod('month')} className={`px-3 py-1 rounded ${period === 'month' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>Месяц</button>
-                        <button onClick={() => setPeriod('all_time')} className={`px-3 py-1 rounded ${period === 'all_time' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>Всё время</button>
+                <div className="stats-card">
+                    <h3>Статистика</h3>
+                    <div className="period-buttons">
+                        <button onClick={() => setPeriod('week')} className={`period-btn ${period === 'week' ? 'active' : ''}`}>Неделя</button>
+                        <button onClick={() => setPeriod('month')} className={`period-btn ${period === 'month' ? 'active' : ''}`}>Месяц</button>
+                        <button onClick={() => setPeriod('all_time')} className={`period-btn ${period === 'all_time' ? 'active' : ''}`}>Всё время</button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div>
-                            <h3 className="font-medium mb-2">По категориям</h3>
-                            {categoryData.length === 0 && <p className="text-gray-500">Нет данных</p>}
+                            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>По категориям</div>
+                            {categoryData.length === 0 && <div className="no-data" style={{ padding: '10px 0' }}>Нет данных</div>}
                             {categoryData.map(item => (
                                 <div key={item.name} className="stat-item">
-                                    <div className="flex justify-between text-sm">
+                                    <div className="stat-label">
                                         <span>{item.name}</span>
                                         <span>{item.value}</span>
                                     </div>
-                                    <div className="stat-bar" style={{ width: `${(item.value / maxCategory) * 100}%` }}></div>
+                                    <div className="stat-bar-bg">
+                                        <div className="stat-bar-fill" style={{ width: `${(item.value / maxCategory) * 100}%` }}></div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                         <div>
-                            <h3 className="font-medium mb-2">По источникам</h3>
-                            {sourceData.length === 0 && <p className="text-gray-500">Нет данных</p>}
+                            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>По источникам</div>
+                            {sourceData.length === 0 && <div className="no-data" style={{ padding: '10px 0' }}>Нет данных</div>}
                             {sourceData.map(item => (
                                 <div key={item.name} className="stat-item">
-                                    <div className="flex justify-between text-sm">
+                                    <div className="stat-label">
                                         <span>{item.name}</span>
                                         <span>{item.value}</span>
                                     </div>
-                                    <div className="stat-bar" style={{ width: `${(item.value / maxSource) * 100}%` }}></div>
+                                    <div className="stat-bar-bg">
+                                        <div className="stat-bar-fill" style={{ width: `${(item.value / maxSource) * 100}%`, background: 'var(--accent-green)' }}></div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -81,7 +373,7 @@
             );
         };
 
-        // Компонент детальной страницы
+        // Детальная страница модели
         const ModelDetail = ({ modelId, onClose }) => {
             const [model, setModel] = useState(null);
             const [loading, setLoading] = useState(true);
@@ -108,7 +400,7 @@
                 const data = [model.raw];
                 const headers = Object.keys(data[0]).join(",");
                 const values = Object.values(data[0]).join(",");
-                const csvContent = "data:text/csv;charset=utf-8," + headers + "\\n" + values;
+                const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + values;
                 const encodedUri = encodeURI(csvContent);
                 const link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
@@ -132,35 +424,35 @@
                 }
             };
             
-            if (loading) return <div className="p-8">Загрузка...</div>;
-            if (!model) return <div className="p-8">Модель не найдена</div>;
+            if (loading) return <div className="loading">Загрузка...</div>;
+            if (!model) return <div className="loading">Модель не найдена</div>;
             
             return (
-                <div className="container mx-auto p-4">
-                    <button onClick={onClose} className="mb-4 text-blue-500 underline">← Назад к дашборду</button>
-                    <div className="bg-white rounded shadow p-6">
-                        <h1 className="text-2xl font-bold mb-4">{model.raw.title || 'Без названия'}</h1>
-                        <div className="flex gap-4 mb-4">
-                            <button onClick={copyLink} className="bg-gray-500 text-white px-3 py-1 rounded">Копировать ссылку</button>
-                            <button onClick={exportSingleCSV} className="bg-green-500 text-white px-3 py-1 rounded">Экспорт в CSV</button>
-                            <button onClick={handleSimilar} className="bg-blue-500 text-white px-3 py-1 rounded">Похожие</button>
+                <div className="detail-container">
+                    <button onClick={onClose} className="back-link">← Назад к дашборду</button>
+                    <div className="detail-card">
+                        <h1 style={{ fontSize: '28px', marginBottom: '12px' }}>{model.raw.title || 'Без названия'}</h1>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                            <button onClick={copyLink} className="btn">Копировать ссылку</button>
+                            <button onClick={exportSingleCSV} className="btn btn-green">Экспорт в CSV</button>
+                            <button onClick={handleSimilar} className="btn btn-primary">Похожие</button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <h2 className="text-xl font-semibold">Raw данные</h2>
-                                <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm">{JSON.stringify(model.raw, null, 2)}</pre>
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-semibold">Enriched данные</h2>
-                                <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm">{JSON.stringify(model.enriched, null, 2)}</pre>
-                            </div>
+                        <div className="raw-data">
+                            <h3 style={{ marginBottom: '16px', fontSize: '18px' }}>Raw данные</h3>
+                            <p><strong>Источник:</strong> {model.raw.source_id}</p>
+                            <p><strong>Название:</strong> {model.raw.title}</p>
+                            <p><strong>Домен знаний:</strong> {model.raw.domain}</p>
+                            <p><strong>Описание:</strong> {model.raw.description}</p>
+                            <p><strong>Ссылка:</strong> <a href={model.raw.url} target="_blank" style={{ color: 'var(--accent)' }}>{model.raw.url}</a></p>
+                            <p><strong>Автор:</strong> {model.raw.author}</p>
+                            <p><strong>Дата создания:</strong> {model.raw.created_at_source}</p>
                         </div>
                     </div>
                 </div>
             );
         };
         
-        // Основной дашборд
+        // Главный дашборд
         const Dashboard = () => {
             const [models, setModels] = useState([]);
             const [total, setTotal] = useState(0);
@@ -184,19 +476,25 @@
                     ...(filters.min_popularity && { min_popularity: filters.min_popularity }),
                     ...(aiFilterIds && { ids: aiFilterIds })
                 });
-                const res = await axios.get(`api/models?${params}`);
-                setModels(res.data.items);
-                setTotal(res.data.total);
+                try {
+                    const res = await axios.get(`/api/models?${params}`);
+                    setModels(res.data.items);
+                    setTotal(res.data.total);
+                } catch(e) { console.error(e); }
             };
             
             const fetchSources = async () => {
-                const res = await axios.get('api/sources');
-                setSources(res.data);
+                try {
+                    const res = await axios.get('/api/sources');
+                    setSources(res.data);
+                } catch(e) { console.error(e); }
             };
             
             const fetchStats = async () => {
-                const res = await axios.get(`api/stats?period=${statsPeriod}`);
-                setStats(res.data);
+                try {
+                    const res = await axios.get(`/api/stats?period=${statsPeriod}`);
+                    setStats(res.data);
+                } catch(e) { console.error(e); }
             };
             
             useEffect(() => {
@@ -266,8 +564,7 @@
                 if (filters.date_from) params.append('date_from', filters.date_from);
                 if (filters.date_to) params.append('date_to', filters.date_to);
                 if (filters.min_popularity) params.append('min_popularity', filters.min_popularity);
-                const url = `api/export_csv?${params.toString()}`;
-                window.location.href = url;
+                window.location.href = `/api/export_csv?${params.toString()}`;
             };
             const exportXLSX = () => {
                 const params = new URLSearchParams();
@@ -278,28 +575,45 @@
                 if (filters.min_popularity) params.append('min_popularity', filters.min_popularity);
                 window.location.href = `api/export_xlsx?${params.toString()}`;
             };
-            // Если выбран ID модели – показываем детальную страницу
+            
             if (selectedModelId) {
                 return <ModelDetail modelId={selectedModelId} onClose={() => setSelectedModelId(null)} />;
             }
             
             return (
-                <div className="container mx-auto p-4">
-                    <h1 className="text-3xl font-bold mb-6">Model Dashboard</h1>
-                    
-                    <div className="bg-white p-4 rounded shadow mb-6 grid grid-cols-1 md:grid-cols-5 gap-4">
-                        <input type="text" name="category" placeholder="Категория" value={filters.category} onChange={handleFilterChange} className="border p-2 rounded" />
-                        <input type="text" name="license" placeholder="Лицензия" value={filters.license} onChange={handleFilterChange} className="border p-2 rounded" />
-                        <input type="date" name="date_from" value={filters.date_from} onChange={handleFilterChange} className="border p-2 rounded" />
-                        <input type="date" name="date_to" value={filters.date_to} onChange={handleFilterChange} className="border p-2 rounded" />
-                        <input type="number" name="min_popularity" placeholder="Мин. популярность" value={filters.min_popularity} onChange={handleFilterChange} className="border p-2 rounded" />
-                        <select value={sortBy} onChange={handleSortChange} className="border p-2 rounded">
-                            <option value="date">По дате</option>
-                            <option value="popularity">По популярности</option>
-                        </select>
-                        <div className="flex gap-2">
-                            <button onClick={exportCSV} className="bg-green-500 text-white p-2 rounded">Экспорт CSV</button>
-                            <button onClick={exportXLSX} className="bg-blue-500 text-white p-2 rounded">Экспорт XLSX</button>
+                <div className="main-content">
+                    {/* Фильтры и сортировка */}
+                    <div className="filter-bar">
+                        <div className="filter-group">
+                            <label>Категория</label>
+                            <input type="text" name="category" placeholder="Категория" value={filters.category} onChange={handleFilterChange} />
+                        </div>
+                        <div className="filter-group">
+                            <label>Лицензия</label>
+                            <input type="text" name="license" placeholder="Лицензия" value={filters.license} onChange={handleFilterChange} />
+                        </div>
+                        <div className="filter-group">
+                            <label>Дата от</label>
+                            <input type="date" name="date_from" value={filters.date_from} onChange={handleFilterChange} />
+                        </div>
+                        <div className="filter-group">
+                            <label>Дата до</label>
+                            <input type="date" name="date_to" value={filters.date_to} onChange={handleFilterChange} />
+                        </div>
+                        <div className="filter-group">
+                            <label>Мин. популярность</label>
+                            <input type="number" name="min_popularity" placeholder="Мин. популярность" value={filters.min_popularity} onChange={handleFilterChange} />
+                        </div>
+                        <div className="filter-group">
+                            <label>Сортировка</label>
+                            <select value={sortBy} onChange={handleSortChange}>
+                                <option value="date">По дате</option>
+                                <option value="popularity">По популярности</option>
+                            </select>
+                        </div>
+                        <div className="filter-group" style={{ flexDirection: 'row', alignItems: 'flex-end', gap: '8px' }}>
+                            <button onClick={exportCSV} className="btn btn-green">Экспорт CSV</button>
+                            <button onClick={exportXLSX} className="btn btn-primary">Экспорт XLSX</button>
                         </div>
                     </div>
                     
@@ -316,37 +630,43 @@
                         <StatsPanel stats={stats} period={statsPeriod} setPeriod={setStatsPeriod} />
                     </div>
                     
-                    <div className="bg-white p-4 rounded shadow mb-6">
-                        <h2 className="text-xl font-semibold mb-2">Источники</h2>
-                        <div className="flex flex-wrap gap-2">
-                            {sources.map(src => <span key={src.id} className="bg-gray-200 px-3 py-1 rounded-full text-sm">{src.name}</span>)}
-                        </div>
+                    {/* Источники */}
+                    <div className="sources-cloud">
+                        <h3>Источники</h3>
+                        {sources.map(src => <span key={src.id} className="source-chip">{src.name}</span>)}
+                        {sources.length === 0 && <span className="source-chip">Загрузка...</span>}
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {/* Сетка моделей */}
+                    <div className="tiles-grid">
                         {models.map(model => (
-                            <div key={model.id} className="bg-white rounded shadow card-hover cursor-pointer transition" onClick={() => setSelectedModelId(model.id)}>
-                                <div className="p-4">
-                                    <h3 className="font-bold text-lg truncate">{model.title}</h3>
-                                    <p className="text-sm text-gray-600">Категория: {model.category || '—'}</p>
-                                    <p className="text-sm text-gray-600">Лицензия: {model.license || '—'}</p>
-                                    <p className="text-sm text-gray-600">Популярность: {model.popularity_metric || '—'}</p>
-                                    <p className="text-sm text-gray-500 mt-2 line-clamp-2">{model.summary_ru || 'Нет описания'}</p>
-                                    <div className="mt-3 flex justify-between items-center">
-                                        <span className="text-xs text-gray-400">{model.source_name}</span>
-                                        <button onClick={(e) => { e.stopPropagation(); handleVectorSearch(model.id); }} className="text-blue-500 text-sm underline">Найти похожие</button>
-                                    </div>
+                            <div key={model.id} className="tile" onClick={() => setSelectedModelId(model.id)}>
+                                <div className="tile-icon"></div>
+                                <h3>{model.title || 'Без названия'}</h3>
+                                <p className="tile-badge">{model.category || 'Общая'}</p>
+                                <p>Лицензия: {model.license || '—'}</p>
+                                <p>Популярность: {model.popularity_metric || '—'}</p>
+                                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>{model.summary_ru ? model.summary_ru.substring(0, 85) : 'Нет описания'}</p>
+                                <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{model.source_name}</span>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleVectorSearch(model.id); }} 
+                                        style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}
+                                    >
+                                        Найти похожие
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
-                    {total === 0 && <p className="text-center text-gray-500 mt-6">Нет данных для отображения</p>}
+                    {total === 0 && <div className="no-data">Нет данных для отображения</div>}
                     
+                    {/* Пагинация */}
                     {total > 0 && (
-                        <div className="flex justify-center gap-2 mt-6">
-                            <button disabled={page === 1} onClick={() => setPage(p => p-1)} className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50">Назад</button>
-                            <span className="px-3 py-1">Страница {page} из {Math.ceil(total/12)}</span>
-                            <button disabled={page >= Math.ceil(total/12)} onClick={() => setPage(p => p+1)} className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50">Вперёд</button>
+                        <div className="pagination">
+                            <button disabled={page === 1} onClick={() => setPage(p => p-1)} className="page-btn">Назад</button>
+                            <span className="page-info">Страница {page} из {Math.ceil(total/12)}</span>
+                            <button disabled={page >= Math.ceil(total/12)} onClick={() => setPage(p => p+1)} className="page-btn">Вперёд</button>
                         </div>
                     )}
                 </div>
