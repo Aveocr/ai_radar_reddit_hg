@@ -228,38 +228,14 @@ function showToast(message, type = "info") {
 
 const CHAT_API = {
     chat: "/api/v1/vector/chat",
+    chats: "/api/v1/vector/chats",
 };
 
 let chatAbortController = null;
-let chatHistory = [];
 let isChatSending = false;
 let isChatInitialized = false;
-const CHAT_STORAGE_KEY = "ai_radar_chat_history";
-
-function loadChatHistory() {
-    try {
-        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-        if (saved) {
-            chatHistory = JSON.parse(saved);
-        }
-    } catch (e) {
-        chatHistory = [];
-    }
-}
-
-function saveChatHistory() {
-    try {
-        const toSave = chatHistory.slice(-100);
-        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toSave));
-    } catch (e) {
-        // ignore
-    }
-}
-
-function addMessage(role, content) {
-    chatHistory.push({ role, content });
-    saveChatHistory();
-}
+let currentChatId = null;
+let chatList = [];
 
 function scrollChatToBottom() {
     const container = document.getElementById("chat-messages");
@@ -268,9 +244,16 @@ function scrollChatToBottom() {
     }
 }
 
+function hideWelcome() {
+    const welcome = document.getElementById("chat-welcome");
+    if (welcome) welcome.style.display = "none";
+}
+
 function renderMessage(role, content) {
     const container = document.getElementById("chat-messages");
     if (!container) return;
+
+    hideWelcome();
 
     const div = document.createElement("div");
     div.className = `message message-${role === "user" ? "user" : "bot"}`;
@@ -343,8 +326,146 @@ function autoResizeTextarea(textarea) {
     textarea.style.height = newHeight + "px";
 }
 
+async function loadChatList() {
+    try {
+        const response = await fetch(CHAT_API.chats, {
+            credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        chatList = await response.json();
+        renderChatList();
+    } catch (e) {
+        console.error("Failed to load chats:", e);
+    }
+}
+
+function renderChatList() {
+    const list = document.getElementById("chat-list");
+    if (!list) return;
+    if (chatList.length === 0) {
+        list.innerHTML = '<div class="chat-list-empty">Нет чатов. Создайте новый!</div>';
+        return;
+    }
+    list.innerHTML = chatList.map(chat => `
+        <button class="chat-list-item ${chat.id === currentChatId ? "active" : ""}" data-chat-id="${chat.id}">
+            <span class="chat-list-item-title">${chat.title}</span>
+            <span class="chat-list-item-delete" data-chat-id="${chat.id}" title="Удалить чат">&#10005;</span>
+        </button>
+    `).join("");
+
+    // Chat switching
+    list.querySelectorAll(".chat-list-item").forEach(item => {
+        item.addEventListener("click", (e) => {
+            if (e.target.classList.contains("chat-list-item-delete")) return;
+            const chatId = item.dataset.chatId;
+            if (chatId !== currentChatId) {
+                switchChat(chatId);
+            }
+        });
+    });
+
+    // Delete buttons
+    list.querySelectorAll(".chat-list-item-delete").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const chatId = btn.dataset.chatId;
+            if (confirm("Удалить этот чат?")) {
+                await deleteChat(chatId);
+            }
+        });
+    });
+}
+
+function showWelcome() {
+    const welcome = document.getElementById("chat-welcome");
+    if (welcome) welcome.style.display = "";
+}
+
+async function switchChat(chatId) {
+    currentChatId = chatId;
+    renderChatList();
+
+    // Clear messages
+    const container = document.getElementById("chat-messages");
+    container.innerHTML = "";
+    showWelcome();
+
+    // Load messages from API
+    try {
+        const response = await fetch(`${CHAT_API.chats}/${chatId}/messages`, {
+            credentials: "same-origin",
+        });
+        if (!response.ok) throw new Error("Failed to load messages");
+        const messages = await response.json();
+        if (messages.length > 0) {
+            container.innerHTML = "";
+            for (const msg of messages) {
+                renderMessage(msg.role, msg.content);
+            }
+        }
+
+        // Update chat title in header
+        const chat = chatList.find(c => c.id === chatId);
+        const titleEl = document.getElementById("chat-title");
+        if (chat && titleEl) {
+            titleEl.textContent = chat.title;
+        }
+    } catch (e) {
+        console.error("Failed to load messages:", e);
+    }
+
+    // Enable input
+    const input = document.getElementById("chat-input");
+    if (input) input.disabled = false;
+}
+
+async function createNewChat() {
+    try {
+        const response = await fetch(CHAT_API.chats, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Новый чат" }),
+            credentials: "same-origin",
+        });
+        if (!response.ok) throw new Error("Failed to create chat");
+        const chat = await response.json();
+        chatList.unshift(chat);
+        await switchChat(chat.id);
+    } catch (e) {
+        console.error("Failed to create chat:", e);
+    }
+}
+
+async function deleteChat(chatId) {
+    try {
+        const response = await fetch(`${CHAT_API.chats}/${chatId}`, {
+            method: "DELETE",
+            credentials: "same-origin",
+        });
+        if (!response.ok) throw new Error("Failed to delete chat");
+        chatList = chatList.filter(c => c.id !== chatId);
+        if (currentChatId === chatId) {
+            currentChatId = null;
+            const container = document.getElementById("chat-messages");
+            container.innerHTML = "";
+            const titleEl = document.getElementById("chat-title");
+            if (titleEl) titleEl.textContent = "";
+            showWelcome();
+        }
+        renderChatList();
+    } catch (e) {
+        console.error("Failed to delete chat:", e);
+    }
+}
+
 async function sendChatMessage() {
     if (isChatSending) return;
+
+    // Auto-create chat if none selected
+    if (!currentChatId) {
+        await createNewChat();
+        if (!currentChatId) return;
+    }
 
     const input = document.getElementById("chat-input");
     const message = input.value.trim();
@@ -355,7 +476,6 @@ async function sendChatMessage() {
 
     // Add user message
     renderMessage("user", message);
-    addMessage("user", message);
 
     // Show typing
     showTypingIndicator();
@@ -364,13 +484,30 @@ async function sendChatMessage() {
 
     chatAbortController = new AbortController();
 
+    // Build history from current messages in DOM
+    const history = [];
+    const container = document.getElementById("chat-messages");
+    const existingMessages = container.querySelectorAll(".message");
+    for (const msgEl of existingMessages) {
+        const bubble = msgEl.querySelector(".message-bubble");
+        const isUser = msgEl.classList.contains("message-user");
+        const isTyping = msgEl.id === "typing-indicator";
+        if (bubble && !isTyping) {
+            history.push({
+                role: isUser ? "user" : "assistant",
+                content: bubble.textContent,
+            });
+        }
+    }
+
     try {
         const response = await fetch(CHAT_API.chat, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                chat_id: currentChatId,
                 message: message,
-                history: chatHistory.slice(-20, -1),
+                history: history.slice(-30, -1),
             }),
             signal: chatAbortController.signal,
             credentials: "same-origin",
@@ -384,16 +521,16 @@ async function sendChatMessage() {
         const data = await response.json();
         hideTypingIndicator();
         renderMessage("assistant", data.reply);
-        addMessage("assistant", data.reply);
+
+        // Refresh chat list to get updated title/timestamp
+        await loadChatList();
 
     } catch (error) {
         hideTypingIndicator();
         if (error.name === "AbortError") {
             renderMessage("assistant", "Ответ прерван.");
-            addMessage("assistant", "[прервано]");
         } else {
             renderMessage("assistant", `Ошибка: ${error.message}`);
-            addMessage("assistant", `[ошибка: ${error.message}]`);
         }
     } finally {
         isChatSending = false;
@@ -416,22 +553,16 @@ function initChat() {
     const input = document.getElementById("chat-input");
     const sendBtn = document.getElementById("chat-send");
     const stopBtn = document.getElementById("chat-stop");
+    const newChatBtn = document.getElementById("chat-new-btn");
 
     if (!input || !sendBtn || !stopBtn) return;
 
-    // Load history
-    const container = document.getElementById("chat-messages");
-    if (container) {
-        const hasWelcome = container.querySelector(".message-bot");
-        if (!hasWelcome || chatHistory.length === 0) {
-            loadChatHistory();
-            if (chatHistory.length > 0) {
-                container.innerHTML = "";
-                for (const msg of chatHistory) {
-                    renderMessage(msg.role, msg.content);
-                }
-            }
-        }
+    // Load chat list
+    loadChatList();
+
+    // New chat button
+    if (newChatBtn) {
+        newChatBtn.addEventListener("click", createNewChat);
     }
 
     // Send button

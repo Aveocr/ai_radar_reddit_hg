@@ -294,6 +294,30 @@ async def llm_status(admin: str = Depends(get_current_admin)):
     }
 
 
+# ─── LLM Summary Config ───
+@router.get("/llm/summary-config")
+async def get_llm_summary_config(
+    db: AsyncSession = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    svc = SchedulerService(db)
+    config = await svc.ensure_config_exists()
+    return {"enabled": config.llm_summary_enabled}
+
+
+@router.post("/llm/summary-config")
+async def toggle_llm_summary_config(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    admin: str = Depends(get_current_admin),
+):
+    svc = SchedulerService(db)
+    config = await svc.update_config(SchedulerConfigUpdate(
+        llm_summary_enabled=body.get("enabled", True),
+    ))
+    return {"enabled": config.llm_summary_enabled}
+
+
 # ─── Scheduler ───
 @router.get("/scheduler", response_model=SchedulerConfigOut)
 async def get_scheduler_config(db: AsyncSession = Depends(get_db), admin: str = Depends(get_current_admin)):

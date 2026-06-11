@@ -1,19 +1,44 @@
+from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
-class ChatMessage(BaseModel):
+class ChatMessageIn(BaseModel):
     role: str
     content: str
 
 
 class ChatRequest(BaseModel):
+    chat_id: Optional[str] = None
     message: str
-    history: List[ChatMessage] = []
+    history: List[ChatMessageIn] = []
 
 
 class ChatResponse(BaseModel):
     reply: str
+    chat_id: str
+
+
+class ChatCreate(BaseModel):
+    title: str = "Новый чат"
+
+
+class ChatOut(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+
+class ChatMessageOut(BaseModel):
+    id: str
+    chat_id: str
+    role: str
+    content: str
+    created_at: datetime
 
 
 class VectorSearchRequest(BaseModel):

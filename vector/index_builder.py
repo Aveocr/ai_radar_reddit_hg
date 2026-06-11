@@ -21,6 +21,8 @@ def _build_item_text(item: EnrichedItem, raw: Optional[RawItem] = None) -> str:
 
     if raw and raw.title:
         parts.append(raw.title)
+    if raw and raw.summary:
+        parts.append(raw.summary)
     if item.summary_ru:
         parts.append(item.summary_ru)
     if item.category:

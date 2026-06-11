@@ -174,6 +174,7 @@ class TestIndexBuilder(unittest.TestCase):
 
         class MockRaw:
             title = "Test Model"
+            summary = "Test raw summary"
 
         class MockEnriched:
             summary_ru = "Test summary"
@@ -210,11 +211,11 @@ class TestIndexBuilder(unittest.TestCase):
 
 class TestVectorSchemas(unittest.TestCase):
     def test_chat_request(self):
-        from vector.schemas import ChatRequest, ChatMessage
+        from vector.schemas import ChatRequest, ChatMessageIn
 
         req = ChatRequest(
             message="Hello",
-            history=[ChatMessage(role="user", content="Hi")],
+            history=[ChatMessageIn(role="user", content="Hi")],
         )
         self.assertEqual(req.message, "Hello")
         self.assertEqual(len(req.history), 1)

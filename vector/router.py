@@ -5,23 +5,29 @@ Endpoints for semantic search, similar items, LLM chat, and index management.
 
 import asyncio
 import os
+from datetime import datetime, timedelta
 from typing import Optional
+from uuid import UUID
 
 import faiss
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin.auth import get_current_admin
 from config import get_settings
-from database.models import EnrichedItem, RawItem
+from database.models import EnrichedItem, RawItem, Chat, ChatMessage
 from database.session import get_db
 from llm.client import LLMClient
+from user.auth import verify_user_session
 from vector.embeddings import get_embedding_provider
 from vector.faiss_index import FaissIndexManager
 from vector.index_builder import rebuild_index
 from vector.schemas import (
+    ChatCreate,
+    ChatMessageOut,
+    ChatOut,
     ChatRequest,
     ChatResponse,
     IndexInfo,
@@ -102,6 +108,132 @@ async def _execute_vector_search(query: str = "", top_k: int = 5):
         return {"results": [], "error": str(exc)}
 
 
+CHAT_CLEANUP_DAYS = 30
+
+
+async def _cleanup_stale_chats(db: AsyncSession):
+    """Delete chats with no activity for 30+ days."""
+    cutoff = datetime.utcnow() - timedelta(days=CHAT_CLEANUP_DAYS)
+    await db.execute(delete(Chat).where(Chat.updated_at < cutoff))
+    await db.commit()
+
+
+async def _chat_title_from_message(message: str) -> str:
+    """Generate a short chat title from the first user message."""
+    title = message.strip()[:80]
+    if len(message.strip()) > 80:
+        title += "..."
+    return title or "Новый чат"
+
+
+# ─── Chat CRUD ───
+
+
+@router.get("/chats", response_model=list[ChatOut])
+async def list_chats(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all chats for the current user, ordered by last activity."""
+    user_id = verify_user_session(request)
+    await _cleanup_stale_chats(db)
+
+    result = await db.execute(
+        select(
+            Chat.id,
+            Chat.title,
+            Chat.created_at,
+            Chat.updated_at,
+            func.count(ChatMessage.id).label("message_count"),
+        )
+        .outerjoin(ChatMessage, ChatMessage.chat_id == Chat.id)
+        .where(Chat.user_id == user_id)
+        .group_by(Chat.id)
+        .order_by(Chat.updated_at.desc())
+    )
+    rows = result.all()
+    return [
+        ChatOut(
+            id=str(row.id),
+            title=row.title,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            message_count=row.message_count,
+        )
+        for row in rows
+    ]
+
+
+@router.post("/chats", response_model=ChatOut, status_code=201)
+async def create_chat(
+    payload: ChatCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new chat for the current user."""
+    user_id = verify_user_session(request)
+    chat = Chat(user_id=user_id, title=payload.title)
+    db.add(chat)
+    await db.commit()
+    await db.refresh(chat)
+    await _cleanup_stale_chats(db)
+    return ChatOut(
+        id=str(chat.id),
+        title=chat.title,
+        created_at=chat.created_at,
+        updated_at=chat.updated_at,
+    )
+
+
+@router.delete("/chats/{chat_id}", status_code=204)
+async def delete_chat(
+    chat_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a chat and all its messages."""
+    user_id = verify_user_session(request)
+    result = await db.execute(
+        select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    )
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    await db.execute(delete(ChatMessage).where(ChatMessage.chat_id == chat_id))
+    await db.delete(chat)
+    await db.commit()
+
+
+@router.get("/chats/{chat_id}/messages", response_model=list[ChatMessageOut])
+async def get_chat_messages(
+    chat_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all messages for a chat."""
+    user_id = verify_user_session(request)
+    result = await db.execute(
+        select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Chat not found")
+    result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.chat_id == chat_id)
+        .order_by(ChatMessage.created_at.asc())
+    )
+    return [
+        ChatMessageOut(
+            id=str(msg.id),
+            chat_id=str(msg.chat_id),
+            role=msg.role,
+            content=msg.content,
+            created_at=msg.created_at,
+        )
+        for msg in result.scalars().all()
+    ]
+
+
 async def _tool_executor(name: str, args: dict):
     if name == "vector_search":
         return await _execute_vector_search(**args)
@@ -111,9 +243,53 @@ async def _tool_executor(name: str, args: dict):
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    request_obj: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Chat with LLM, optionally using FAISS context via function calling."""
+    """Chat with LLM, optionally using FAISS context via function calling.
+    Saves messages to DB if chat_id is provided."""
+    user_id = verify_user_session(request_obj)
+
+    chat_id: Optional[UUID] = None
+    if request.chat_id:
+        try:
+            chat_id = UUID(request.chat_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid chat_id")
+
+    # Create or find chat
+    if chat_id is None:
+        chat = Chat(
+            user_id=user_id,
+            title=_chat_title_from_message(request.message),
+        )
+        db.add(chat)
+        await db.flush()
+        chat_id = chat.id
+    else:
+        result = await db.execute(
+            select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+        )
+        chat = result.scalar_one_or_none()
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+        # Auto-title from first message if still default
+        if chat.title == "Новый чат":
+            result = await db.execute(
+                select(func.count()).select_from(ChatMessage).where(ChatMessage.chat_id == chat_id)
+            )
+            if result.scalar() == 0:
+                chat.title = _chat_title_from_message(request.message)
+
+    # Save user message
+    user_msg = ChatMessage(chat_id=chat_id, role="user", content=request.message)
+    db.add(user_msg)
+    await db.flush()
+
+    # Update chat timestamp
+    chat.updated_at = datetime.utcnow()
+
+    # Build LLM context
     settings = get_settings()
     llm = LLMClient(
         api_key=settings.llm_api_key or None,
@@ -143,9 +319,16 @@ async def chat(
             temperature=0.7,
             max_tokens=4000,
         )
-        return ChatResponse(reply=reply)
     except Exception as exc:
+        await db.rollback()
         raise HTTPException(status_code=502, detail=f"LLM API error: {str(exc)}")
+
+    # Save assistant reply
+    assistant_msg = ChatMessage(chat_id=chat_id, role="assistant", content=reply)
+    db.add(assistant_msg)
+    await db.commit()
+
+    return ChatResponse(reply=reply, chat_id=str(chat_id))
 
 
 @router.post("/search", response_model=VectorSearchResponse)

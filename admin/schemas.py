@@ -155,6 +155,7 @@ class SchedulerConfigOut(BaseModel):
     next_run: Optional[datetime]
     updated_at: datetime
     created_at: datetime
+    llm_summary_enabled: bool = True
 
     class Config:
         from_attributes = True
@@ -164,3 +165,4 @@ class SchedulerConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
     interval_hours: Optional[int] = None
     start_date: Optional[datetime] = None
+    llm_summary_enabled: Optional[bool] = None
