@@ -9,7 +9,7 @@ import json
 import time
 from abc import ABC, abstractmethod
 from typing import List, Optional
-
+import os
 import aiohttp
 import numpy as np
 
@@ -39,20 +39,55 @@ class EmbeddingProvider(ABC):
 class LocalEmbeddings(EmbeddingProvider):
     """Local embeddings using fastembed (ONNX runtime, no torch)."""
 
-    MODEL_DIR = "models/onnx/all-MiniLM-L6-v2"
+    MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+    HF_REPO = "qdrant/all-MiniLM-L6-v2-onnx"
+    FLAT_DIR = "models/onnx/all-MiniLM-L6-v2"
 
     def __init__(self):
-        self._model_path = self._resolve_model_path()
+        self._cache_dir = self._resolve_cache_dir()
         self._model = None
         self._dim = 384
 
     @staticmethod
-    def _resolve_model_path() -> str:
-        import os
+    def _resolve_cache_dir() -> str:
         return os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "models", "onnx", "all-MiniLM-L6-v2",
+            "models", "onnx",
         )
+
+    def _ensure_cache(self) -> str:
+        snapshot = os.path.join(
+            self._cache_dir,
+            f"models--{self.HF_REPO.replace('/', '--')}",
+            "snapshots", "main",
+        )
+        refs_file = os.path.join(
+            self._cache_dir,
+            f"models--{self.HF_REPO.replace('/', '--')}",
+            "refs", "main",
+        )
+
+        if os.path.isfile(os.path.join(snapshot, "model.onnx")):
+            return self._cache_dir
+
+        flat = os.path.join(self._cache_dir, "all-MiniLM-L6-v2")
+        if not os.path.isdir(flat):
+            raise RuntimeError(
+                f"[LocalEmbeddings] Model not found.\n"
+                f"Place ONNX files in {flat}/"
+            )
+
+        import shutil
+        os.makedirs(snapshot, exist_ok=True)
+        os.makedirs(os.path.dirname(refs_file), exist_ok=True)
+        for fn in os.listdir(flat):
+            src = os.path.join(flat, fn)
+            if os.path.isfile(src):
+                shutil.copy2(src, os.path.join(snapshot, fn))
+        with open(refs_file, "w") as f:
+            f.write("main")
+        print(f"[Model] Cache structure created at {snapshot}")
+        return self._cache_dir
 
     @property
     def dim(self) -> int:
@@ -61,15 +96,8 @@ class LocalEmbeddings(EmbeddingProvider):
     def _load_model(self):
         if self._model is None:
             from fastembed import TextEmbedding
-            path = self._model_path
-            if not os.path.isdir(path):
-                raise RuntimeError(
-                    f"[LocalEmbeddings] Model directory not found: {path}\n"
-                    f"Place the ONNX model files in {path}:\n"
-                    f"  - model.onnx\n  - tokenizer.json\n  - config.json\n"
-                    f"  - tokenizer_config.json\n  - special_tokens_map.json"
-                )
-            self._model = TextEmbedding(model_name=path)
+            cache_dir = self._ensure_cache()
+            self._model = TextEmbedding(self.MODEL_NAME, cache_dir=cache_dir)
             try:
                 self._dim = self._model.model_dim
             except AttributeError:

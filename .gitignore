@@ -244,3 +244,6 @@ desktop.ini
 data/*.db
 data/faiss.index
 data/faiss_meta.json
+
+# Auto-generated fastembed cache (built from models/onnx/all-MiniLM-L6-v2/ at startup)
+models/onnx/models--qdrant--all-MiniLM-L6-v2-onnx/
