@@ -13,7 +13,7 @@ from database.session import get_db
 from admin.schemas import (
     SourceCreate, SourceOut, TaskCreate, HuggingFaceTaskCreate, TaskOut, TaskRetry,
     LogOut, LogFilter, StatsOut, PipelineStatus, RedditTaskCreate, ParserRunCreate,
-    SchedulerConfigOut, SchedulerConfigUpdate
+    SchedulerConfigOut, SchedulerConfigUpdate, LlmSummaryConfigUpdate
 )
 from admin.service import SourceService, TaskService, LogService, StatsService, PipelineService, SchedulerService
 from parsers.engine import ParserEngine
@@ -307,13 +307,13 @@ async def get_llm_summary_config(
 
 @router.post("/llm/summary-config")
 async def toggle_llm_summary_config(
-    body: dict,
+    body: LlmSummaryConfigUpdate,
     db: AsyncSession = Depends(get_db),
     admin: str = Depends(get_current_admin),
 ):
     svc = SchedulerService(db)
     config = await svc.update_config(SchedulerConfigUpdate(
-        llm_summary_enabled=body.get("enabled", True),
+        llm_summary_enabled=body.enabled,
     ))
     return {"enabled": config.llm_summary_enabled}
 

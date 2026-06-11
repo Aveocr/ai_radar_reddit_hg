@@ -63,6 +63,11 @@ async def build_index_from_db(
     rows = result.all()
 
     if not rows:
+        manager.build(
+            np.empty((0, embedding_provider.dim), dtype=np.float32),
+            [],
+        )
+        manager.save()
         return 0
 
     texts = []

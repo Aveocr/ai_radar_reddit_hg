@@ -166,3 +166,7 @@ class SchedulerConfigUpdate(BaseModel):
     interval_hours: Optional[int] = None
     start_date: Optional[datetime] = None
     llm_summary_enabled: Optional[bool] = None
+
+
+class LlmSummaryConfigUpdate(BaseModel):
+    enabled: bool

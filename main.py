@@ -43,13 +43,29 @@ async def lifespan(app: FastAPI):
     # Create tables for both PostgreSQL and SQLite fallback
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Migration: add llm_summary_enabled to existing scheduler_config tables
-        try:
-            await conn.execute(
-                sa.text("ALTER TABLE scheduler_config ADD COLUMN llm_summary_enabled BOOLEAN DEFAULT TRUE")
+
+        scheduler_columns = {
+            column["name"]
+            for column in await conn.run_sync(
+                lambda sync_conn: sa.inspect(sync_conn).get_columns("scheduler_config")
             )
-        except Exception:
-            pass  # column already exists
+        }
+        if "llm_summary_enabled" not in scheduler_columns:
+            await conn.execute(
+                sa.text(
+                    "ALTER TABLE scheduler_config "
+                    "ADD COLUMN llm_summary_enabled BOOLEAN DEFAULT TRUE"
+                )
+            )
+
+        raw_item_columns = {
+            column["name"]
+            for column in await conn.run_sync(
+                lambda sync_conn: sa.inspect(sync_conn).get_columns("raw_items")
+            )
+        }
+        if "summary" not in raw_item_columns:
+            await conn.execute(sa.text("ALTER TABLE raw_items ADD COLUMN summary TEXT"))
 
     async with session_factory() as session:
         await seed_default_sources(session)

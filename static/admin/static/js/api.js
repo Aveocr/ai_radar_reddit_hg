@@ -5,8 +5,14 @@
 const API_BASE = '/api/v1/admin';
 
 async function fetchJSON(url, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (options.body != null && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
+
     const response = await fetch(url, {
         ...options,
+        headers,
         credentials: 'include',  // ← ВАЖНО: отправляем cookie
     });
 

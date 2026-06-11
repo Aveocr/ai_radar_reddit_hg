@@ -202,11 +202,15 @@ class TestIndexBuilder(unittest.TestCase):
 
             mock_db.execute.return_value = MockResult()
             manager = FaissIndexManager(dim=384)
-            count = await build_index_from_db(mock_db, manager=manager)
-            return count
+            with patch.object(manager, "save") as mock_save:
+                count = await build_index_from_db(mock_db, manager=manager)
+            return count, manager, mock_save
 
-        count = asyncio.run(_run())
+        count, manager, mock_save = asyncio.run(_run())
         self.assertEqual(count, 0)
+        self.assertIsNotNone(manager.index)
+        self.assertEqual(manager.size, 0)
+        mock_save.assert_called_once()
 
 
 class TestVectorSchemas(unittest.TestCase):

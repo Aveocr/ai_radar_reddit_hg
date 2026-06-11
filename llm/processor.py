@@ -18,6 +18,19 @@ class LLMProcessor:
         self.db = db
         self.llm = llm or LLMClient()
 
+    async def is_summary_enabled(self) -> bool:
+        """Return whether optional paid summary generation is enabled."""
+        try:
+            result = await self.db.execute(
+                select(SchedulerConfig.llm_summary_enabled).where(SchedulerConfig.id == 1)
+            )
+            enabled = result.scalar_one_or_none()
+            return True if enabled is None else bool(enabled)
+        except Exception:
+            # Avoid an unexpected paid LLM call when config cannot be read.
+            await self.db.rollback()
+            return False
+
     async def process_item(self, raw_item_id: UUID) -> Optional[EnrichedItem]:
         """Process single raw item through LLM pipeline."""
         result = await self.db.execute(select(RawItem).where(RawItem.id == raw_item_id))
@@ -33,6 +46,8 @@ class LLMProcessor:
             return None
 
         try:
+            summary_enabled = await self.is_summary_enabled()
+
             # Call LLM for enrichment
             enrichment = await self.llm.classify(
                 title=raw.title,
@@ -57,16 +72,6 @@ class LLMProcessor:
             )
 
             self.db.add(enriched)
-
-            # Check if LLM summary is enabled before generating it
-            summary_enabled = True
-            try:
-                cfg = await self.db.execute(select(SchedulerConfig).where(SchedulerConfig.id == 1))
-                sc = cfg.scalar_one_or_none()
-                if sc is not None:
-                    summary_enabled = sc.llm_summary_enabled
-            except Exception:
-                pass
 
             if summary_enabled:
                 raw_summary = await self.llm.summarize_raw(
