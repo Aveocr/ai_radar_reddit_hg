@@ -43,16 +43,27 @@ class GitHubAdapter(BaseParser):
             max_items,
         )
 
-    def normalize(self, raw_item: dict[str, Any]) -> dict[str, Any]:
-        item = dict(raw_item)
-        item["created_at_source"] = _as_utc_naive(item.get("created_at_source"))
-        item["updated_at_source"] = _as_utc_naive(item.get("updated_at_source"))
+    @staticmethod
+    def _ensure_standard_keys(item: dict[str, Any]) -> dict[str, Any]:
         item["domain"] = item.get("domain") or []
         item["tags"] = item.get("tags") or []
         item["language"] = item.get("language") or []
         item["framework"] = item.get("framework") or []
         item["task_type"] = item.get("task_type") or []
+        item["model_type"] = item.get("model_type")
+        item["popularity_metric"] = item.get("popularity_metric") or item.get("stars") or item.get("likes")
+        item["license"] = item.get("license")
+        item["author"] = item.get("author")
+        item["description"] = item.get("description")
+        item["created_at_source"] = _as_utc_naive(item.get("created_at_source"))
+        item["updated_at_source"] = _as_utc_naive(item.get("updated_at_source"))
+        item["raw_json"] = item.get("raw_json")
+        item["status"] = item.get("status") or "raw"
         return item
+
+    def normalize(self, raw_item: dict[str, Any]) -> dict[str, Any]:
+        item = dict(raw_item)
+        return self._ensure_standard_keys(item)
 
 
 class HuggingFaceAdapter(BaseParser):
@@ -82,14 +93,7 @@ class HuggingFaceAdapter(BaseParser):
     def normalize(self, raw_item: dict[str, Any]) -> dict[str, Any]:
         item = dict(raw_item)
         item["popularity_metric"] = item.get("popularity_metric") or item.get("likes") or item.get("downloads")
-        item["created_at_source"] = _as_utc_naive(item.get("created_at_source"))
-        item["updated_at_source"] = _as_utc_naive(item.get("updated_at_source"))
-        item["domain"] = item.get("domain") or []
-        item["tags"] = item.get("tags") or []
-        item["language"] = item.get("language") or []
-        item["framework"] = item.get("framework") or []
-        item["task_type"] = item.get("task_type") or []
-        return item
+        return self._ensure_standard_keys(item)
 
 
 class RedditAdapter(BaseParser):
@@ -116,14 +120,9 @@ class RedditAdapter(BaseParser):
     def normalize(self, raw_item: dict[str, Any]) -> dict[str, Any]:
         item = dict(raw_item)
         item["popularity_metric"] = item.get("popularity_metric") or item.get("likes")
-        item["created_at_source"] = _as_utc_naive(item.get("created_at_source"))
-        item["updated_at_source"] = _as_utc_naive(item.get("updated_at_source"))
-        item["domain"] = item.get("domain") or ["Reddit"]
-        item["tags"] = item.get("tags") or []
-        item["language"] = item.get("language") or []
-        item["framework"] = item.get("framework") or []
-        item["task_type"] = item.get("task_type") or []
-        return item
+        if not item.get("domain"):
+            item["domain"] = ["Reddit"]
+        return self._ensure_standard_keys(item)
 
 
 class ArxivAdapter(BaseParser):
@@ -159,11 +158,4 @@ class ArxivAdapter(BaseParser):
         if isinstance(item.get("author"), list):
             item["author"] = ", ".join(str(author) for author in item["author"] if author)
         item["popularity_metric"] = item.get("popularity_metric") or item.get("citations")
-        item["created_at_source"] = _as_utc_naive(item.get("created_at_source"))
-        item["updated_at_source"] = _as_utc_naive(item.get("updated_at_source"))
-        item["domain"] = item.get("domain") or []
-        item["tags"] = item.get("tags") or []
-        item["language"] = item.get("language") or []
-        item["framework"] = item.get("framework") or []
-        item["task_type"] = item.get("task_type") or []
-        return item
+        return self._ensure_standard_keys(item)

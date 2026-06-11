@@ -10,6 +10,7 @@ router = APIRouter(prefix="/api", tags=["models"])
 async def list_models(
     category: Optional[str] = Query(None),
     license: Optional[str] = Query(None),
+    source: Optional[str] = Query(None, description="Comma-separated source codes to filter by"),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     min_popularity: Optional[int] = Query(None),
@@ -26,6 +27,8 @@ async def list_models(
         "date_to": date_to,
         "min_popularity": min_popularity,
     }
+    if source:
+        filters["source"] = [x.strip() for x in source.split(",") if x.strip()]
     if ids:
         filters["ids"] = [x.strip() for x in ids.split(",") if x.strip()]
     models, total = await provider.get_models(filters, page, limit, sort_by)

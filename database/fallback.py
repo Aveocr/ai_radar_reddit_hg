@@ -158,6 +158,18 @@ def init_sqlite():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS scheduler_config (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            enabled INTEGER DEFAULT 0,
+            interval_hours INTEGER DEFAULT 48,
+            start_date TEXT,
+            last_run TEXT,
+            next_run TEXT,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
     ]
 
     for sql in tables:

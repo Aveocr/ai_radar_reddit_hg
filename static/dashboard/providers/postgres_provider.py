@@ -50,6 +50,11 @@ class PostgresDataProvider(DataProvider):
         if filters.get('min_popularity'):
             base_query += " AND r.popularity_metric >= %s"
             params.append(filters['min_popularity'])
+        sources_filter = filters.get('source')
+        if sources_filter:
+            placeholders = ", ".join(["%s"] * len(sources_filter))
+            base_query += f" AND s.code IN ({placeholders})"
+            params.extend(sources_filter)
         ids_filter = filters.get('ids')
         if ids_filter:
             placeholders = ", ".join(["%s"] * len(ids_filter))

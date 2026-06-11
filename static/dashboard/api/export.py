@@ -11,6 +11,7 @@ router = APIRouter(prefix="/api", tags=["export"])
 async def export_csv_get(
     category: Optional[str] = Query(None),
     license: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     min_popularity: Optional[int] = Query(None),
@@ -24,6 +25,8 @@ async def export_csv_get(
             "date_to": date_to,
             "min_popularity": min_popularity,
         }
+        if source:
+            filters["source"] = [x.strip() for x in source.split(",") if x.strip()]
         df = await provider.get_filtered_dataframe(filters)
         if df.empty:
             csv_content = "No data"
@@ -51,6 +54,7 @@ async def export_csv_get(
 async def export_xlsx_get(
     category: Optional[str] = Query(None),
     license: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     min_popularity: Optional[int] = Query(None),
@@ -64,6 +68,8 @@ async def export_xlsx_get(
             "date_to": date_to,
             "min_popularity": min_popularity,
         }
+        if source:
+            filters["source"] = [x.strip() for x in source.split(",") if x.strip()]
         df = await provider.get_filtered_dataframe(filters)
         if df.empty:
             return Response(content="No data", media_type="text/plain", status_code=204)

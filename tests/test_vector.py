@@ -110,7 +110,7 @@ class TestLocalEmbeddings(unittest.TestCase):
         mock_model.embed.return_value = iter([np.array([0.1] * 384)])
         mock_te.return_value = mock_model
 
-        emb = LocalEmbeddings("test-model")
+        emb = LocalEmbeddings()
         result = asyncio.run(emb.embed("test text"))
 
         self.assertEqual(len(result), 384)
@@ -128,7 +128,7 @@ class TestLocalEmbeddings(unittest.TestCase):
         ])
         mock_te.return_value = mock_model
 
-        emb = LocalEmbeddings("test-model")
+        emb = LocalEmbeddings()
         result = asyncio.run(emb.embed_batch(["text1", "text2"]))
 
         self.assertEqual(result.shape, (2, 384))

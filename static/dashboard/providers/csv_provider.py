@@ -75,6 +75,8 @@ class CSVDataProvider(DataProvider):
         if filters.get('min_popularity') and 'stars' in df.columns:
             stars_numeric = pd.to_numeric(df['stars'], errors='coerce')
             df = df[stars_numeric >= filters['min_popularity']]
+        if filters.get('source') and 'source_id' in df.columns:
+            df = df[df['source_id'].isin(filters['source'])]
         return df
 
     def _clean_nan(self, value):

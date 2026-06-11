@@ -330,11 +330,31 @@ class HuggingFaceModelsParser:
 
     @staticmethod
     def _to_serializable_dict(model: Any) -> dict[str, Any]:
-        if hasattr(model, "__dict__"):
-            return {
-                key: value
-                for key, value in model.__dict__.items()
-                if not key.startswith("_")
-            }
-
-        return dict(model)
+        essential = {}
+        for attr in ("id", "modelId", "pipeline_tag", "library_name", "author",
+                     "likes", "downloads", "downloads_all_time", "created_at",
+                     "createdAt", "last_modified", "lastModified", "sha",
+                     "private", "disabled", "gated", "safetensors"):
+            val = getattr(model, attr, None)
+            if val is not None:
+                essential[attr] = val
+        tags = getattr(model, "tags", None) or []
+        essential["tags"] = tags[:100]
+        card_data = getattr(model, "card_data", None) or getattr(model, "cardData", None)
+        if card_data:
+            if isinstance(card_data, dict):
+                essential["card_data"] = {
+                    k: v for k, v in card_data.items()
+                    if k in ("description", "license", "language", "metrics",
+                             "model-index", "datasets", "library_name",
+                             "pipeline_tag", "tags", "base_model")
+                }
+            elif hasattr(card_data, "__dict__"):
+                essential["card_data"] = {
+                    k: v for k, v in card_data.__dict__.items()
+                    if not k.startswith("_") and k in ("description", "license", "language",
+                                                        "metrics", "model-index", "datasets",
+                                                        "library_name", "pipeline_tag",
+                                                        "tags", "base_model")
+                }
+        return essential

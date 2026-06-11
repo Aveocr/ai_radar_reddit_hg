@@ -240,6 +240,16 @@
             font-size: 12px;
             margin: 0 8px 8px 0;
             border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        .source-chip:hover {
+            border-color: var(--accent);
+            background: var(--bg-hover);
+        }
+        .source-chip-active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: var(--accent);
+            color: #93c5fd;
         }
 
         /* Пагинация */
@@ -380,7 +390,7 @@
             
             useEffect(() => {
                 if (modelId) {
-                    axios.get(`api/models/${modelId}`).then(res => {
+                    axios.get(`/dashboard/api/models/${modelId}`).then(res => {
                         setModel(res.data);
                         setLoading(false);
                     }).catch(err => {
@@ -412,7 +422,7 @@
             
             const handleSimilar = async () => {
                 try {
-                    const res = await axios.post('api/vector-search', { model_id: modelId });
+                    const res = await axios.post('/dashboard/api/vector-search', { model_id: modelId });
                     if (res.data.similar_ids && res.data.similar_ids.length > 0) {
                         alert(`Найдено похожих: ${res.data.similar_ids.length}\nID: ${res.data.similar_ids.join(', ')}`);
                     } else {
@@ -460,6 +470,7 @@
             const [filters, setFilters] = useState({ category: '', license: '', date_from: '', date_to: '', min_popularity: '' });
             const [sortBy, setSortBy] = useState('date');
             const [sources, setSources] = useState([]);
+            const [selectedSources, setSelectedSources] = useState(new Set());
             const [stats, setStats] = useState({ by_category: {}, by_source: {} });
             const [statsPeriod, setStatsPeriod] = useState('all_time');
             const [aiQuery, setAiQuery] = useState('');
@@ -476,8 +487,11 @@
                     ...(filters.min_popularity && { min_popularity: filters.min_popularity }),
                     ...(aiFilterIds && { ids: aiFilterIds })
                 });
+                if (selectedSources.size > 0) {
+                    params.append('source', Array.from(selectedSources).join(','));
+                }
                 try {
-                    const res = await axios.get(`/api/models?${params}`);
+                    const res = await axios.get(`/dashboard/api/models?${params}`);
                     setModels(res.data.items);
                     setTotal(res.data.total);
                 } catch(e) { console.error(e); }
@@ -485,21 +499,21 @@
             
             const fetchSources = async () => {
                 try {
-                    const res = await axios.get('/api/sources');
+                    const res = await axios.get('/dashboard/api/sources');
                     setSources(res.data);
                 } catch(e) { console.error(e); }
             };
             
             const fetchStats = async () => {
                 try {
-                    const res = await axios.get(`/api/stats?period=${statsPeriod}`);
+                    const res = await axios.get(`/dashboard/api/stats?period=${statsPeriod}`);
                     setStats(res.data);
                 } catch(e) { console.error(e); }
             };
             
             useEffect(() => {
                 fetchModels();
-            }, [page, filters, sortBy, aiFilterIds]);
+            }, [page, filters, sortBy, aiFilterIds, selectedSources]);
             
             useEffect(() => {
                 fetchSources();
@@ -520,10 +534,23 @@
                 setPage(1);
             };
             
+            const toggleSource = (sourceCode) => {
+                setSelectedSources(prev => {
+                    const next = new Set(prev);
+                    if (next.has(sourceCode)) {
+                        next.delete(sourceCode);
+                    } else {
+                        next.add(sourceCode);
+                    }
+                    return next;
+                });
+                setPage(1);
+            };
+            
             const handleAIFilter = async () => {
                 if (!aiQuery) return;
                 try {
-                    const res = await axios.post('api/ai-filter', { query: aiQuery, top_k: 30 });
+                    const res = await axios.post('/dashboard/api/ai-filter', { query: aiQuery, top_k: 30 });
                     if (res.data.ids && res.data.ids.length > 0) {
                         setAiFilterIds(res.data.ids.join(','));
                         setPage(1);
@@ -544,7 +571,7 @@
             
             const handleVectorSearch = async (modelId) => {
                 try {
-                    const res = await axios.post('api/vector-search', { model_id: modelId });
+                    const res = await axios.post('/dashboard/api/vector-search', { model_id: modelId });
                     if (res.data.similar_ids && res.data.similar_ids.length > 0) {
                         setAiFilterIds(res.data.similar_ids.join(','));
                         setPage(1);
@@ -564,7 +591,10 @@
                 if (filters.date_from) params.append('date_from', filters.date_from);
                 if (filters.date_to) params.append('date_to', filters.date_to);
                 if (filters.min_popularity) params.append('min_popularity', filters.min_popularity);
-                window.location.href = `/api/export_csv?${params.toString()}`;
+                if (selectedSources.size > 0) {
+                    params.append('source', Array.from(selectedSources).join(','));
+                }
+                window.location.href = `/dashboard/api/export_csv?${params.toString()}`;
             };
             const exportXLSX = () => {
                 const params = new URLSearchParams();
@@ -573,7 +603,10 @@
                 if (filters.date_from) params.append('date_from', filters.date_from);
                 if (filters.date_to) params.append('date_to', filters.date_to);
                 if (filters.min_popularity) params.append('min_popularity', filters.min_popularity);
-                window.location.href = `api/export_xlsx?${params.toString()}`;
+                if (selectedSources.size > 0) {
+                    params.append('source', Array.from(selectedSources).join(','));
+                }
+                window.location.href = `/dashboard/api/export_xlsx?${params.toString()}`;
             };
             
             if (selectedModelId) {
@@ -632,9 +665,27 @@
                     
                     {/* Источники */}
                     <div className="sources-cloud">
-                        <h3>Источники</h3>
-                        {sources.map(src => <span key={src.id} className="source-chip">{src.name}</span>)}
+                        <h3>Источники {selectedSources.size > 0 && <span style={{color:'var(--accent)'}}>({selectedSources.size})</span>}</h3>
+                        {sources.map(src => (
+                            <span
+                                key={src.id}
+                                className={`source-chip ${selectedSources.has(src.code) ? 'source-chip-active' : ''}`}
+                                onClick={() => toggleSource(src.code)}
+                                style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                            >
+                                {src.name}
+                            </span>
+                        ))}
                         {sources.length === 0 && <span className="source-chip">Загрузка...</span>}
+                        {selectedSources.size > 0 && (
+                            <button
+                                onClick={() => { setSelectedSources(new Set()); setPage(1); }}
+                                className="btn"
+                                style={{ marginLeft: '8px', fontSize: '11px', padding: '4px 10px' }}
+                            >
+                                Сбросить
+                            </button>
+                        )}
                     </div>
                     
                     {/* Сетка моделей */}

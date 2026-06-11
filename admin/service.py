@@ -3,6 +3,11 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, func, update, desc
+
+from config import get_settings
+
+settings = get_settings()
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import (
@@ -289,55 +294,59 @@ class PipelineService:
             )
 
         # Collect node
-        collect_count = await self.db.execute(
+        collect_raw = await self.db.execute(
             select(func.count()).select_from(RawItem).where(RawItem.status == "raw")
         )
+        collect_val = collect_raw.scalar() or 0
         nodes.append(
             PipelineNode(
                 node_id="collect",
                 label="Сбор данных",
-                status="running" if collect_count.scalar() > 0 else "idle",
-                count=collect_count.scalar() or 0,
+                status="running" if collect_val > 0 else "idle",
+                count=collect_val,
                 last_run=None,
             )
         )
 
         # Dedup node
-        parsed_count = await self.db.execute(
+        parsed_raw = await self.db.execute(
             select(func.count()).select_from(RawItem).where(RawItem.status == "parsed")
         )
+        parsed_val = parsed_raw.scalar() or 0
         nodes.append(
             PipelineNode(
                 node_id="dedup",
                 label="Дедупликация",
-                status="running" if parsed_count.scalar() > 0 else "idle",
-                count=parsed_count.scalar() or 0,
+                status="running" if parsed_val > 0 else "idle",
+                count=parsed_val,
                 last_run=None,
             )
         )
 
         # LLM node
-        pending_enrich = await self.db.execute(
+        enrich_raw = await self.db.execute(
             select(func.count()).select_from(EnrichedItem).where(EnrichedItem.processing_status == "pending")
         )
+        enrich_val = enrich_raw.scalar() or 0
         nodes.append(
             PipelineNode(
                 node_id="llm",
                 label="LLM Обработка",
-                status="running" if pending_enrich.scalar() > 0 else "idle",
-                count=pending_enrich.scalar() or 0,
+                status="running" if enrich_val > 0 else "idle",
+                count=enrich_val,
                 last_run=None,
             )
         )
 
         # Vector node
-        vector_count = await self.db.execute(select(func.count()).select_from(Vector))
+        vector_raw = await self.db.execute(select(func.count()).select_from(Vector))
+        vector_val = vector_raw.scalar() or 0
         nodes.append(
             PipelineNode(
                 node_id="vector",
                 label="FAISS Индексация",
-                status="running" if vector_count.scalar() > 0 else "idle",
-                count=vector_count.scalar() or 0,
+                status="running" if vector_val > 0 else "idle",
+                count=vector_val,
                 last_run=None,
             )
         )
@@ -369,8 +378,8 @@ class SchedulerService:
     async def create_default(self) -> SchedulerConfigOut:
         config = SchedulerConfig(
             id=1,
-            enabled=False,
-            interval_hours=48,
+            enabled=settings.scheduler_enabled,
+            interval_hours=settings.scheduler_interval_hours,
             start_date=None,
         )
         self.db.add(config)

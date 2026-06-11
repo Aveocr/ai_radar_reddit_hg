@@ -1,4 +1,7 @@
+import os
 import unittest
+
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///data/test.db")
 
 from fastapi.testclient import TestClient
 

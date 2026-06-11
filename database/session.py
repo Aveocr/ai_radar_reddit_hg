@@ -40,6 +40,12 @@ def _ensure_engine():
     if _engine is not None:
         return _engine
 
+    if not settings.database_url.startswith("postgresql"):
+        _engine = _init_sqlite()
+        _db_type = "sqlite"
+        print(f"[DB] SQLite engine created ({settings.database_url})")
+        return _engine
+
     try:
         _engine = _init_postgres()
         _db_type = "postgres"
@@ -73,20 +79,26 @@ async def init_engine_for_app():
     """Initialize the best available database engine for FastAPI startup."""
     global _engine, _session_factory, _db_type
 
-    try:
-        if _engine is None or _db_type != "postgres":
-            _engine = _init_postgres()
-            _db_type = "postgres"
-        async with _engine.connect():
-            pass
-        print("[DB] PostgreSQL connection verified")
-    except Exception as exc:
-        print(f"[DB] PostgreSQL startup failed: {type(exc).__name__}")
-        print("[DB] Switching to SQLite (demo mode)")
-        if _engine is not None:
-            await _engine.dispose()
+    # If URL is not PostgreSQL, use SQLite directly
+    if not settings.database_url.startswith("postgresql"):
         _engine = _init_sqlite()
         _db_type = "sqlite"
+        print(f"[DB] SQLite engine created ({settings.database_url})")
+    else:
+        try:
+            if _engine is None or _db_type != "postgres":
+                _engine = _init_postgres()
+                _db_type = "postgres"
+            async with _engine.connect():
+                pass
+            print("[DB] PostgreSQL connection verified")
+        except Exception as exc:
+            print(f"[DB] PostgreSQL startup failed: {type(exc).__name__}")
+            print("[DB] Switching to SQLite (demo mode)")
+            if _engine is not None:
+                await _engine.dispose()
+            _engine = _init_sqlite()
+            _db_type = "sqlite"
 
     _session_factory = async_sessionmaker(
         _engine,

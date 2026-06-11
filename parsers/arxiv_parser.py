@@ -310,7 +310,7 @@ def parse_arxiv_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
         'author': authors,
         'license': None,
         'tags': categories,
-        'stars': None,
+        'popularity_metric': None,
         'created_at_source': published,
         'updated_at_source': updated,
         'language': None,

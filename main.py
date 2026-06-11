@@ -21,6 +21,7 @@ from user.router import router as user_router
 from admin.auth import verify_session
 from static.dashboard.main import app as dashboard_app
 from database.base import Base
+from database import models as db_models
 from database.session import init_engine_for_app, is_postgres
 from database.bootstrap import seed_default_sources
 from admin.service import SchedulerService

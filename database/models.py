@@ -5,10 +5,10 @@ from typing import List, Optional
 from sqlalchemy import (
     String, Text, DateTime, Integer, Float, Boolean, JSON, ForeignKey, UniqueConstraint
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
+from database.types import PortableUUID as UUID, PortableJSONB as JSONB, PortableArray as ARRAY
 
 
 class Source(Base):
@@ -39,8 +39,8 @@ class RawItem(Base):
     domain: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     url: Mapped[str] = mapped_column(String(1000), nullable=False)
-    author: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    license: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    author: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    license: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     tags: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     popularity_metric: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at_source: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
