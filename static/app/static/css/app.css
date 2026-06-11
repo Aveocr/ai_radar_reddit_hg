@@ -301,7 +301,7 @@
 /* Chat layout — sidebar + chat area */
 .search-layout {
     display: flex;
-    height: calc(100vh - 60px);
+    height: calc(100% - 57px);
     overflow: hidden;
 }
 

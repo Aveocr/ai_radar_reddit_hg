@@ -259,9 +259,10 @@ async def chat(
 
     # Create or find chat
     if chat_id is None:
+        title = await _chat_title_from_message(request.message)
         chat = Chat(
             user_id=user_id,
-            title=_chat_title_from_message(request.message),
+            title=title,
         )
         db.add(chat)
         await db.flush()
@@ -279,15 +280,17 @@ async def chat(
                 select(func.count()).select_from(ChatMessage).where(ChatMessage.chat_id == chat_id)
             )
             if result.scalar() == 0:
-                chat.title = _chat_title_from_message(request.message)
+                chat.title = await _chat_title_from_message(request.message)
 
     # Save user message
     user_msg = ChatMessage(chat_id=chat_id, role="user", content=request.message)
     db.add(user_msg)
-    await db.flush()
 
     # Update chat timestamp
     chat.updated_at = datetime.utcnow()
+
+    # Commit user message before LLM call so it persists even if LLM fails
+    await db.commit()
 
     # Build LLM context
     settings = get_settings()
@@ -311,6 +314,7 @@ async def chat(
         messages.append({"role": msg.role, "content": msg.content})
     messages.append({"role": "user", "content": request.message})
 
+    reply = ""
     try:
         reply = await llm.chat_with_tools(
             messages,
@@ -320,13 +324,13 @@ async def chat(
             max_tokens=4000,
         )
     except Exception as exc:
-        await db.rollback()
         raise HTTPException(status_code=502, detail=f"LLM API error: {str(exc)}")
 
     # Save assistant reply
-    assistant_msg = ChatMessage(chat_id=chat_id, role="assistant", content=reply)
-    db.add(assistant_msg)
-    await db.commit()
+    if reply:
+        assistant_msg = ChatMessage(chat_id=chat_id, role="assistant", content=reply)
+        db.add(assistant_msg)
+        await db.commit()
 
     return ChatResponse(reply=reply, chat_id=str(chat_id))
 

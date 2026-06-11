@@ -37,6 +37,8 @@ async function apiFetch(url, options = {}) {
 }
 
 async function init() {
+    const screenEl = document.getElementById("screen-search");
+    if (screenEl) screenEl.style.height = window.innerHeight + "px";
     document.getElementById("btn-start").addEventListener("click", async () => {
         await loadCategories();
         showScreen("interests");
@@ -585,5 +587,10 @@ function initChat() {
         updateChatSendButtonState();
     });
 }
+
+window.addEventListener("resize", () => {
+    const el = document.getElementById("screen-search");
+    if (el) el.style.height = window.innerHeight + "px";
+});
 
 document.addEventListener("DOMContentLoaded", init);
