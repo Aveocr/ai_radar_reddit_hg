@@ -24,7 +24,6 @@ from database.base import Base
 from database.session import init_engine_for_app, is_postgres
 from database.bootstrap import seed_default_sources
 from admin.service import SchedulerService
-from admin.schemas import SchedulerConfigUpdate
 from parsers.scheduler import BackgroundScheduler
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from vector.router import router as vector_router, get_index_manager
@@ -39,12 +38,12 @@ async def lifespan(app: FastAPI):
     engine = await init_engine_for_app()
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    if is_postgres():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # Create tables for both PostgreSQL and SQLite fallback
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-        async with session_factory() as session:
-            await seed_default_sources(session)
+    async with session_factory() as session:
+        await seed_default_sources(session)
 
     app.state.http_client = httpx.AsyncClient(timeout=10.0)
 
