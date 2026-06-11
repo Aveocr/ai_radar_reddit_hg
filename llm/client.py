@@ -133,3 +133,21 @@ class LLMClient:
         raw = await self.chat(messages, response_format={"type": "json_object"})
         import json
         return json.loads(raw)
+
+    async def summarize_raw(self, title: str, description: str, tags: list[str]) -> str:
+        """Generate a concise Russian summary for RawItem."""
+        from llm.prompts import RAW_SUMMARY_PROMPT
+
+        prompt = RAW_SUMMARY_PROMPT.format(
+            title=title,
+            description=description or "",
+            tags=", ".join(tags) if tags else "",
+        )
+        messages = [
+            {"role": "system", "content": "You are a technical writer. Return ONLY valid JSON."},
+            {"role": "user", "content": prompt},
+        ]
+        raw = await self.chat(messages, response_format={"type": "json_object"})
+        import json
+        data = json.loads(raw)
+        return data.get("summary", "")

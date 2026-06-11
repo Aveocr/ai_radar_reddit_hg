@@ -55,7 +55,8 @@ def init_sqlite():
             raw_json TEXT,
             collected_at TEXT DEFAULT CURRENT_TIMESTAMP,
             status TEXT DEFAULT 'raw',
-            hash TEXT NOT NULL
+            hash TEXT NOT NULL,
+            summary TEXT
         )
         """,
         """
@@ -167,6 +168,25 @@ def init_sqlite():
             last_run TEXT,
             next_run TEXT,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            llm_summary_enabled INTEGER DEFAULT 1
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS chats (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT DEFAULT 'Новый чат',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id TEXT PRIMARY KEY,
+            chat_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """,

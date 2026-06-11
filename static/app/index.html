@@ -142,28 +142,32 @@
                 <a href="#" class="btn-back" data-back="main">&larr; Назад</a>
             </nav>
         </header>
-        <div class="chat-container">
-            <div class="chat-header">
-                <h2>Умный поиск с AI</h2>
-                <p class="chat-header-subtitle">Задайте вопрос о моделях, проектах и инструментах AI</p>
-            </div>
-            <div class="chat-messages" id="chat-messages">
-                <div class="message message-bot">
-                    <div class="message-avatar">AI</div>
-                    <div class="message-bubble bot">
-                        Здравствуйте! Я AI-ассистент системы AI Radar. Я могу помочь найти информацию о моделях, проектах и инструментах. Задайте любой вопрос!
+        <div class="search-layout">
+            <aside class="chat-sidebar" id="chat-sidebar">
+                <button class="btn btn-primary chat-new-btn" id="chat-new-btn">+ Новый чат</button>
+                <div class="chat-list" id="chat-list"></div>
+            </aside>
+            <div class="chat-container">
+                <div class="chat-header">
+                    <h2 id="chat-title"></h2>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-welcome" id="chat-welcome">
+                        <div class="chat-welcome-icon">&#9673;</div>
+                        <h3>AI Radar</h3>
+                        <p>Задайте вопрос о моделях, проектах и инструментах AI</p>
                     </div>
                 </div>
-            </div>
-            <div class="chat-input-bar">
-                <textarea
-                    id="chat-input"
-                    class="chat-input"
-                    placeholder="Введите сообщение..."
-                    rows="1"
-                ></textarea>
-                <button class="btn btn-primary chat-send-btn" id="chat-send" title="Отправить (Enter)">&#10148;</button>
-                <button class="btn btn-secondary chat-stop-btn" id="chat-stop" title="Остановить" style="display:none;">&#9632;</button>
+                <div class="chat-input-bar">
+                    <textarea
+                        id="chat-input"
+                        class="chat-input"
+                        placeholder="Введите сообщение..."
+                        rows="1"
+                    ></textarea>
+                    <button class="btn btn-primary chat-send-btn" id="chat-send" title="Отправить (Enter)">&#10148;</button>
+                    <button class="btn btn-secondary chat-stop-btn" id="chat-stop" title="Остановить" style="display:none;">&#9632;</button>
+                </div>
             </div>
         </div>
     </div>

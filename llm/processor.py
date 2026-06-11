@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import RawItem, EnrichedItem
+from database.models import RawItem, EnrichedItem, SchedulerConfig
 from llm.client import LLMClient
 
 
@@ -57,6 +57,26 @@ class LLMProcessor:
             )
 
             self.db.add(enriched)
+
+            # Check if LLM summary is enabled before generating it
+            summary_enabled = True
+            try:
+                cfg = await self.db.execute(select(SchedulerConfig).where(SchedulerConfig.id == 1))
+                sc = cfg.scalar_one_or_none()
+                if sc is not None:
+                    summary_enabled = sc.llm_summary_enabled
+            except Exception:
+                pass
+
+            if summary_enabled:
+                raw_summary = await self.llm.summarize_raw(
+                    title=raw.title,
+                    description=raw.description or "",
+                    tags=raw.tags or [],
+                )
+                if raw_summary:
+                    raw.summary = raw_summary
+
             raw.status = "enriched"
             await self.db.commit()
             await self.db.refresh(enriched)

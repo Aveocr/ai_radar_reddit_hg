@@ -26,6 +26,7 @@ from database.session import init_engine_for_app, is_postgres
 from database.bootstrap import seed_default_sources
 from admin.service import SchedulerService
 from parsers.scheduler import BackgroundScheduler
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from vector.router import router as vector_router, get_index_manager
 
@@ -42,6 +43,13 @@ async def lifespan(app: FastAPI):
     # Create tables for both PostgreSQL and SQLite fallback
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Migration: add llm_summary_enabled to existing scheduler_config tables
+        try:
+            await conn.execute(
+                sa.text("ALTER TABLE scheduler_config ADD COLUMN llm_summary_enabled BOOLEAN DEFAULT TRUE")
+            )
+        except Exception:
+            pass  # column already exists
 
     async with session_factory() as session:
         await seed_default_sources(session)

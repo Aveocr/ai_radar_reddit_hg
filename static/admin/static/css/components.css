@@ -62,3 +62,11 @@
 .filters-bar { display: flex; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; align-items: center; background: rgba(255,255,255,0.01); }
 .filter-select, .filter-input { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 8px 12px; color: var(--text-primary); font-size: 13px; min-width: 140px; }
 .filter-select:focus, .filter-input:focus { outline: none; border-color: var(--accent-blue); }
+
+/* Toggle Switch */
+.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg-hover); border-radius: 24px; transition: 0.3s; }
+.toggle-slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; }
+.toggle-switch input:checked + .toggle-slider { background: #16a34a; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }

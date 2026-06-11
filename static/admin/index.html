@@ -344,6 +344,19 @@
                         </div>
                     </div>
                     <div id="faiss-rebuild-log" style="margin-top:12px;"></div>
+                    <div class="llm-summary-toggle" style="margin-top:20px; padding-top:20px; border-top:1px solid var(--border);">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <label class="toggle-switch" id="llm-summary-toggle">
+                                <input type="checkbox" id="llm-summary-checkbox">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div>
+                                <div style="font-weight:600; font-size:14px;">LLM Summary</div>
+                                <div style="font-size:12px; color:var(--text-muted);">Авто-генерация краткого описания через LLM (экономит токены)</div>
+                            </div>
+                            <span id="llm-summary-status" style="margin-left:auto; font-size:13px; color:var(--text-muted);">...</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 

@@ -17,6 +17,44 @@ async function loadFaiss() {
     }
 }
 
+async function loadLlmSummaryConfig() {
+    try {
+        const res = await fetchJSON('/api/v1/admin/llm/summary-config');
+        const checkbox = document.getElementById('llm-summary-checkbox');
+        const status = document.getElementById('llm-summary-status');
+        if (checkbox) checkbox.checked = res.enabled;
+        if (status) {
+            status.textContent = res.enabled ? '✓ Включено' : '✗ Отключено';
+            status.style.color = res.enabled ? '#16a34a' : '#9ca3af';
+        }
+    } catch (err) {
+        console.error('LLM summary config load error:', err);
+    }
+}
+
+async function toggleLlmSummary(enabled) {
+    try {
+        const res = await fetchJSON('/api/v1/admin/llm/summary-config', {
+            method: 'POST',
+            body: JSON.stringify({ enabled }),
+        });
+        const checkbox = document.getElementById('llm-summary-checkbox');
+        const status = document.getElementById('llm-summary-status');
+        if (checkbox) checkbox.checked = res.enabled;
+        if (status) {
+            status.textContent = res.enabled ? '✓ Включено' : '✗ Отключено';
+            status.style.color = res.enabled ? '#16a34a' : '#9ca3af';
+        }
+        showToast(`LLM Summary ${res.enabled ? 'включено' : 'отключено'}`, 'success');
+    } catch (err) {
+        console.error('LLM summary toggle error:', err);
+        showToast('Ошибка переключения LLM Summary', 'error');
+        // Revert checkbox
+        const checkbox = document.getElementById('llm-summary-checkbox');
+        if (checkbox) checkbox.checked = !enabled;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-rebuild-faiss')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-rebuild-faiss');
@@ -39,4 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.textContent = '⚡ Перестроить индекс';
         }
     });
+
+    // LLM Summary toggle
+    loadLlmSummaryConfig();
+    const checkbox = document.getElementById('llm-summary-checkbox');
+    if (checkbox) {
+        checkbox.addEventListener('change', () => {
+            toggleLlmSummary(checkbox.checked);
+        });
+    }
 });
