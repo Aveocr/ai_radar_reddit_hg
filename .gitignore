@@ -239,3 +239,8 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Runtime data (DB, FAISS index)
+data/*.db
+data/faiss.index
+data/faiss_meta.json
