@@ -49,6 +49,10 @@
                     <span class="nav-icon">&#128452;</span>
                     <span class="nav-label">База данных</span>
                 </a>
+                <a href="#" class="nav-item" data-page="faiss">
+                    <span class="nav-icon">&#128269;</span>
+                    <span class="nav-label">FAISS</span>
+                </a>
                 <a href="#" class="nav-item" data-page="grafana">
                     <span class="nav-icon">&#128200;</span>
                     <span class="nav-label">Grafana</span>
@@ -311,6 +315,38 @@
                 </div>
             </div>
 
+            <div class="page" id="page-faiss">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>FAISS векторный индекс</h3>
+                        <button class="btn btn-primary" id="btn-rebuild-faiss">&#9889; Перестроить индекс</button>
+                    </div>
+                    <div class="stats-grid" id="faiss-stats">
+                        <div class="stat-card">
+                            <div class="stat-icon stat-vectors">&#128269;</div>
+                            <div class="stat-value" id="faiss-size">-</div>
+                            <div class="stat-label">Векторов в индексе</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon stat-raw">&#128230;</div>
+                            <div class="stat-value" id="faiss-db-count">-</div>
+                            <div class="stat-label">Готовых в БД</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon stat-enriched">&#9878;</div>
+                            <div class="stat-value" id="faiss-dim">-</div>
+                            <div class="stat-label">Размерность</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon stat-raw">&#128200;</div>
+                            <div class="stat-value" id="faiss-status">-</div>
+                            <div class="stat-label">Статус</div>
+                        </div>
+                    </div>
+                    <div id="faiss-rebuild-log" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
             <div class="page" id="page-grafana">
                 <div class="panel grafana-panel">
                     <div class="panel-header">
@@ -339,6 +375,7 @@
     <script src="/admin/static/js/pages/logs.js"></script>
     <script src="/admin/static/js/pages/sources.js"></script>
     <script src="/admin/static/js/pages/dbstats.js"></script>
+    <script src="/admin/static/js/pages/faiss.js"></script>
     <script src="/admin/static/js/app.js"></script>
 </body>
 </html>

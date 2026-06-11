@@ -80,6 +80,7 @@ async function init() {
         await loadCategories();
         hydrateSelectedInterests();
         navigateAfterAuth();
+        initChat();
     } catch (error) {
         console.error("Session init failed:", error);
         showScreen("onboarding");
@@ -221,6 +222,237 @@ function showToast(message, type = "info") {
     toast.innerHTML = `<span>${type === "success" ? "&#9989;" : "&#8505;"}</span><span>${message}</span>`;
     document.body.appendChild(toast);
     setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+// ─── Chat (AI Assistant) ───
+
+const CHAT_API = {
+    chat: "/api/v1/vector/chat",
+};
+
+let chatAbortController = null;
+let chatHistory = [];
+let isChatSending = false;
+let isChatInitialized = false;
+const CHAT_STORAGE_KEY = "ai_radar_chat_history";
+
+function loadChatHistory() {
+    try {
+        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+        if (saved) {
+            chatHistory = JSON.parse(saved);
+        }
+    } catch (e) {
+        chatHistory = [];
+    }
+}
+
+function saveChatHistory() {
+    try {
+        const toSave = chatHistory.slice(-100);
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(toSave));
+    } catch (e) {
+        // ignore
+    }
+}
+
+function addMessage(role, content) {
+    chatHistory.push({ role, content });
+    saveChatHistory();
+}
+
+function scrollChatToBottom() {
+    const container = document.getElementById("chat-messages");
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function renderMessage(role, content) {
+    const container = document.getElementById("chat-messages");
+    if (!container) return;
+
+    const div = document.createElement("div");
+    div.className = `message message-${role === "user" ? "user" : "bot"}`;
+
+    const avatar = document.createElement("div");
+    avatar.className = "message-avatar";
+    avatar.textContent = role === "user" ? "U" : "AI";
+
+    const bubble = document.createElement("div");
+    bubble.className = `message-bubble ${role === "user" ? "user" : "bot"}`;
+    bubble.textContent = content;
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    container.appendChild(div);
+    scrollChatToBottom();
+}
+
+function showTypingIndicator() {
+    const container = document.getElementById("chat-messages");
+    if (!container) return;
+
+    const existing = document.getElementById("typing-indicator");
+    if (existing) existing.remove();
+
+    const div = document.createElement("div");
+    div.className = "message message-bot";
+    div.id = "typing-indicator";
+
+    const avatar = document.createElement("div");
+    avatar.className = "message-avatar";
+    avatar.textContent = "AI";
+
+    const bubble = document.createElement("div");
+    bubble.className = "message-bubble bot";
+    bubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    container.appendChild(div);
+    scrollChatToBottom();
+}
+
+function hideTypingIndicator() {
+    const el = document.getElementById("typing-indicator");
+    if (el) el.remove();
+}
+
+function updateChatSendButtonState() {
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("chat-send");
+    const stopBtn = document.getElementById("chat-stop");
+
+    if (!input || !sendBtn || !stopBtn) return;
+
+    if (isChatSending) {
+        sendBtn.style.display = "none";
+        stopBtn.style.display = "flex";
+    } else {
+        sendBtn.style.display = "flex";
+        stopBtn.style.display = "none";
+    }
+
+    sendBtn.disabled = isChatSending || !input.value.trim();
+}
+
+function autoResizeTextarea(textarea) {
+    textarea.style.height = "auto";
+    const newHeight = Math.min(textarea.scrollHeight, 120);
+    textarea.style.height = newHeight + "px";
+}
+
+async function sendChatMessage() {
+    if (isChatSending) return;
+
+    const input = document.getElementById("chat-input");
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = "";
+    input.style.height = "auto";
+
+    // Add user message
+    renderMessage("user", message);
+    addMessage("user", message);
+
+    // Show typing
+    showTypingIndicator();
+    isChatSending = true;
+    updateChatSendButtonState();
+
+    chatAbortController = new AbortController();
+
+    try {
+        const response = await fetch(CHAT_API.chat, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message: message,
+                history: chatHistory.slice(-20, -1),
+            }),
+            signal: chatAbortController.signal,
+            credentials: "same-origin",
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        hideTypingIndicator();
+        renderMessage("assistant", data.reply);
+        addMessage("assistant", data.reply);
+
+    } catch (error) {
+        hideTypingIndicator();
+        if (error.name === "AbortError") {
+            renderMessage("assistant", "Ответ прерван.");
+            addMessage("assistant", "[прервано]");
+        } else {
+            renderMessage("assistant", `Ошибка: ${error.message}`);
+            addMessage("assistant", `[ошибка: ${error.message}]`);
+        }
+    } finally {
+        isChatSending = false;
+        chatAbortController = null;
+        updateChatSendButtonState();
+    }
+}
+
+function stopChatMessage() {
+    if (chatAbortController) {
+        chatAbortController.abort();
+        chatAbortController = null;
+    }
+}
+
+function initChat() {
+    if (isChatInitialized) return;
+    isChatInitialized = true;
+
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("chat-send");
+    const stopBtn = document.getElementById("chat-stop");
+
+    if (!input || !sendBtn || !stopBtn) return;
+
+    // Load history
+    const container = document.getElementById("chat-messages");
+    if (container) {
+        const hasWelcome = container.querySelector(".message-bot");
+        if (!hasWelcome || chatHistory.length === 0) {
+            loadChatHistory();
+            if (chatHistory.length > 0) {
+                container.innerHTML = "";
+                for (const msg of chatHistory) {
+                    renderMessage(msg.role, msg.content);
+                }
+            }
+        }
+    }
+
+    // Send button
+    sendBtn.addEventListener("click", sendChatMessage);
+
+    // Stop button
+    stopBtn.addEventListener("click", stopChatMessage);
+
+    // Keyboard events
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
+
+    // Auto-resize
+    input.addEventListener("input", () => {
+        autoResizeTextarea(input);
+        updateChatSendButtonState();
+    });
 }
 
 document.addEventListener("DOMContentLoaded", init);

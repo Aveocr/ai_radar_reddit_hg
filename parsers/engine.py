@@ -161,6 +161,10 @@ class ParserEngine:
                 task_id, "completed", items_collected=items_collected, items_new=items_new
             )
 
+            if items_new > 0:
+                from vector.scheduler import flag_rebuild_needed
+                flag_rebuild_needed()
+
         except Exception as e:
             await self.db.rollback()
             log.status = "failed"

@@ -30,3 +30,7 @@ Dashboard `AI Radar Overview` создается автоматически че
 - график сбора по дням;
 - количество данных по источникам;
 - таблица спарсенных `raw_items`.
+
+
+# Перестроить FAISS индекс (после наполнения БД):
+curl -X POST http://localhost:8000/api/v1/vector/rebuild

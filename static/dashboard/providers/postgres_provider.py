@@ -50,6 +50,11 @@ class PostgresDataProvider(DataProvider):
         if filters.get('min_popularity'):
             base_query += " AND r.popularity_metric >= %s"
             params.append(filters['min_popularity'])
+        ids_filter = filters.get('ids')
+        if ids_filter:
+            placeholders = ", ".join(["%s"] * len(ids_filter))
+            base_query += f" AND e.id IN ({placeholders})"
+            params.extend(ids_filter)
 
         if sort_by == 'popularity':
             base_query += " ORDER BY r.popularity_metric DESC NULLS LAST"

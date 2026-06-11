@@ -9,16 +9,37 @@ class Settings(BaseSettings):
     admin_static_path: str = "static/admin"
     parser_interval_hours: int = 48
 
-    # ─── Admin Auth (добавлено) ───
+    # ─── Admin Auth ───
     admin_username: str = "admin"
     admin_password: str = "admin"
 
     # ─── External Services ───
     auth_service_url: str = "http://localhost:8001"
 
+
     # ─── Scheduler ───
     scheduler_interval_hours: int = 48
     scheduler_enabled: bool = False
+
+    # ─── LLM Settings ───
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
+
+    # ─── Embedding Settings ───
+    embedding_provider: str = "local"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_dim: int = 384
+    gigachat_client_id: str = ""
+    gigachat_client_secret: str = ""
+    gigachat_scope: str = "GIGACHAT_API_PERS"
+    gigachat_base_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
+    gigachat_verify_ssl: bool = False
+
+    # ─── FAISS Settings ───
+    faiss_index_path: str = "data/faiss.index"
+    faiss_meta_path: str = "data/faiss_meta.json"
+
 
     @field_validator("debug", mode="before")
     @classmethod
@@ -30,6 +51,15 @@ class Settings(BaseSettings):
             if normalized in {"debug", "development", "dev"}:
                 return True
         return value
+
+    @field_validator("embedding_provider", mode="before")
+    @classmethod
+    def validate_embedding_provider(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"local", "gigachat"}:
+                return normalized
+        return "local"
 
     class Config:
         env_file = ".env"

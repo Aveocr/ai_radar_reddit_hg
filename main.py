@@ -3,6 +3,7 @@
 AI Radar — Main Application Entry Point
 """
 
+import asyncio
 import uvicorn
 from contextlib import asynccontextmanager
 
@@ -26,6 +27,7 @@ from admin.service import SchedulerService
 from admin.schemas import SchedulerConfigUpdate
 from parsers.scheduler import BackgroundScheduler
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from vector.router import router as vector_router, get_index_manager
 
 
 _scheduler: BackgroundScheduler | None = None
@@ -56,10 +58,35 @@ async def lifespan(app: FastAPI):
     if _scheduler:
         asyncio.create_task(_scheduler.start())
 
+    get_index_manager()
+
+    from vector.embeddings import get_embedding_provider
+    embed_provider = get_embedding_provider()
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, embed_provider._load_model)
+    print("[Model] Embedding model loaded")
+
+    from vector.scheduler import scheduler_loop
+    scheduler_task = asyncio.create_task(scheduler_loop(), name="faiss-scheduler")
+
     yield
+
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
+
+    from vector.router import _index_manager
+    if _index_manager is not None:
+        try:
+            _index_manager.save()
+        except Exception:
+            pass
 
     if _scheduler:
         await _scheduler.stop()
+
     await app.state.http_client.aclose()
     await engine.dispose()
 
@@ -191,6 +218,7 @@ async def admin_spa(request: Request, path: str = ""):
 # ═══════════════════════════════════════════════════════
 app.include_router(admin_router)
 app.include_router(user_router)
+app.include_router(vector_router)
 
 
 @app.get("/")
@@ -233,7 +261,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         reload=False,
         log_level="info",
