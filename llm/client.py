@@ -6,7 +6,7 @@ Supports OpenAI-compatible APIs (OpenAI, local LLMs, etc.)
 import json as json_module
 import os
 import asyncio
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List, Callable, Awaitable
 
 import aiohttp
 
@@ -63,7 +63,7 @@ class LLMClient:
         self,
         messages: list[dict],
         tools: List[Dict[str, Any]],
-        tool_executor: Callable[[str, Dict[str, Any]], Any],
+        tool_executor: Callable[[str, Dict[str, Any]], Awaitable[Any]],
         temperature: float = 0.3,
         max_tokens: int = 4000,
         max_tool_rounds: int = 5,
@@ -95,7 +95,7 @@ class LLMClient:
                     args = json_module.loads(fn["arguments"])
                 except json_module.JSONDecodeError:
                     args = {}
-                result = tool_executor(fn["name"], args)
+                result = await tool_executor(fn["name"], args)
                 payload["messages"].append({
                     "role": "tool",
                     "tool_call_id": tc["id"],

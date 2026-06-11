@@ -46,6 +46,7 @@ class IndexInfo(BaseModel):
     size: int
     dim: int
     loaded: bool
+    db_count: int = 0
 
 
 class RebuildResponse(BaseModel):

@@ -7,6 +7,7 @@ async function loadFaiss() {
         const info = await fetchJSON('/api/v1/vector/index-info');
 
         document.getElementById('faiss-size').textContent = formatNumber(info.size);
+        document.getElementById('faiss-db-count').textContent = formatNumber(info.db_count);
         document.getElementById('faiss-dim').textContent = info.dim;
         document.getElementById('faiss-status').textContent = info.loaded ? 'Загружен' : 'Пуст';
         document.getElementById('faiss-status').style.color = info.loaded ? '#16a34a' : '#9ca3af';

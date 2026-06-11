@@ -102,9 +102,9 @@ async def _execute_vector_search(query: str = "", top_k: int = 5):
         return {"results": [], "error": str(exc)}
 
 
-def _tool_executor(name: str, args: dict):
+async def _tool_executor(name: str, args: dict):
     if name == "vector_search":
-        return asyncio.run(_execute_vector_search(**args))
+        return await _execute_vector_search(**args)
     return {"error": f"Unknown tool: {name}"}
 
 
@@ -256,13 +256,24 @@ async def rebuild(
 
 
 @router.get("/index-info", response_model=IndexInfo)
-async def index_info():
-    """Get FAISS index status."""
+async def index_info(
+    db: AsyncSession = Depends(get_db),
+):
+    """Get FAISS index status with DB item count."""
     manager = get_index_manager()
+    from sqlalchemy import select, func
+    from database.models import EnrichedItem
+    result = await db.execute(
+        select(func.count()).select_from(EnrichedItem).where(
+            EnrichedItem.processing_status == "completed"
+        )
+    )
+    db_count = result.scalar() or 0
     return IndexInfo(
         size=manager.size,
         dim=manager.dim,
         loaded=not manager.is_empty,
+        db_count=db_count,
     )
 
 

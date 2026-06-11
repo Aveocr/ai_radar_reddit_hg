@@ -43,6 +43,13 @@ async def lifespan(app: FastAPI):
     # Load FAISS index
     get_index_manager()
 
+    # Pre-load embedding model (prevents blocking event loop on first request)
+    from vector.embeddings import get_embedding_provider
+    embed_provider = get_embedding_provider()
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, embed_provider._load_model)
+    print("[Model] Embedding model loaded")
+
     # Start background FAISS rebuild scheduler
     from vector.scheduler import scheduler_loop
     scheduler_task = asyncio.create_task(scheduler_loop(), name="faiss-scheduler")
@@ -237,7 +244,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         reload=False,
         log_level="info",
