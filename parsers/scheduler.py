@@ -86,6 +86,7 @@ class BackgroundScheduler:
         config = await svc.get_config()
 
         if not config or not config.enabled:
+            await db.commit()
             return
 
         now = datetime.utcnow()

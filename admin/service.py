@@ -421,4 +421,5 @@ class SchedulerService:
         config = await self.get_config()
         if not config:
             return await self.create_default()
+        await self.db.commit()
         return config
